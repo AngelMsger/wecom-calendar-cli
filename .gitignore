@@ -1,0 +1,25 @@
+# Build artifacts
+/bin/
+/dist/
+/wecom-calendar-cli
+
+# Local environment / secrets
+.env
+*.local
+
+# Local SQLite store (may contain personal calendar data; never commit)
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# OS
+.DS_Store
+
+# Go
+*.test
+*.out
+
+# npm package (build/npm)
+node_modules/
+build/npm/binary/

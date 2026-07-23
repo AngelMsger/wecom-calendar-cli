@@ -1,0 +1,114 @@
+package app
+
+import (
+	"context"
+	"time"
+
+	expandpkg "github.com/angelmsger/wecom-calendar-cli/internal/expand"
+	syncpkg "github.com/angelmsger/wecom-calendar-cli/internal/sync"
+	"github.com/spf13/cobra"
+)
+
+func newSyncCmd(s *appState) *cobra.Command {
+	var full, dryRun bool
+	var calendarID string
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Sync WeCom calendars into the local store",
+		Long: "Pull calendars and events over CalDAV into the local SQLite store.\n" +
+			"Incremental by default (calendars whose change-tag is unchanged are\n" +
+			"skipped); --full rescans everything. Idempotent: re-running is safe and\n" +
+			"leaves the data unchanged. This never touches your event metadata.",
+		Example: "  wecom-calendar-cli sync\n" +
+			"  wecom-calendar-cli sync --full\n" +
+			"  wecom-calendar-cli sync --calendar 1688853806313356 --dry-run",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// A full pull makes many small requests; bound the whole run
+			// generously (the per-request timeout still applies in transport).
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+			defer cancel()
+			client, err := s.newClient(ctx)
+			if err != nil {
+				return err
+			}
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+
+			if dryRun {
+				cals, err := client.ListCalendars(ctx)
+				if err != nil {
+					return err
+				}
+				type dryRow struct {
+					ID        string `json:"id"`
+					Name      string `json:"name"`
+					WouldScan bool   `json:"would_scan"`
+					Reason    string `json:"reason"`
+				}
+				var rows []dryRow
+				for _, c := range cals {
+					if calendarID != "" && c.ID != calendarID {
+						continue
+					}
+					stored, ok, err := st.CalendarState(c.ID)
+					if err != nil {
+						return err
+					}
+					would, reason := true, "ctag changed"
+					switch {
+					case full:
+						reason = "full rescan"
+					case !ok || stored == "":
+						reason = "never synced"
+					case stored == c.Ctag:
+						would, reason = false, "ctag unchanged"
+					}
+					rows = append(rows, dryRow{ID: c.ID, Name: c.DisplayName, WouldScan: would, Reason: reason})
+				}
+				return s.emit(map[string]any{"dry_run": true, "calendars": rows})
+			}
+
+			loc := displayLoc()
+			res, err := syncpkg.Run(ctx, client, st, syncpkg.Options{
+				Full:       full,
+				CalendarID: calendarID,
+				Since:      syncWindowStart(),
+				Until:      syncWindowEnd(),
+				Loc:        loc,
+			})
+			if err != nil {
+				return err
+			}
+			// Rebuild the expanded/deduped instances so queries are ready.
+			instances, err := expandpkg.Rebuild(st, expandpkg.Options{
+				Since: expandWindowStart(), Until: expandWindowEnd(), Loc: loc,
+			})
+			if err != nil {
+				return err
+			}
+			return s.emit(map[string]any{
+				"mode":                res.Mode,
+				"calendars_total":     res.CalendarsTotal,
+				"calendars_scanned":   res.CalendarsScanned,
+				"resources_fetched":   res.ResourcesFetched,
+				"events_upserted":     res.EventsUpserted,
+				"events_soft_deleted": res.EventsSoftDeleted,
+				"instances_rebuilt":   instances,
+			})
+		},
+	}
+	f := cmd.Flags()
+	f.BoolVar(&full, "full", false, "ignore change-tags and rescan every calendar")
+	f.BoolVar(&dryRun, "dry-run", false, "report which calendars would be scanned, without writing")
+	f.StringVar(&calendarID, "calendar", "", "sync only one calendar id")
+	return cmd
+}
+
+// syncWindowStart/End bound the CalDAV calendar-query used to enumerate events.
+// Wide enough to capture the full personal history and a couple of years ahead.
+func syncWindowStart() time.Time { return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC) }
+func syncWindowEnd() time.Time   { return time.Now().AddDate(2, 0, 0) }

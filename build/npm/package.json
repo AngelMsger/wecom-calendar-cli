@@ -1,0 +1,47 @@
+{
+  "name": "@angelmsger/wecom-calendar-cli",
+  "version": "0.1.0",
+  "description": "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store and query them from the terminal, built for coding agents: incremental sync, event queries over a date range, and a free-form agent-owned metadata layer for classification and external task links.",
+  "keywords": [
+    "wecom",
+    "wework",
+    "enterprise-wechat",
+    "calendar",
+    "caldav",
+    "cli",
+    "agent",
+    "claude",
+    "sqlite"
+  ],
+  "homepage": "https://angelmsger.github.io/wecom-calendar-cli/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AngelMsger/wecom-calendar-cli.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "wecom-calendar-cli": "bin/wecom-calendar-cli.js"
+  },
+  "main": "install.js",
+  "scripts": {
+    "postinstall": "node install.js",
+    "test": "node --test install.test.js"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wecom-calendar-cli — CLI reference</title>
+<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<link rel="canonical" href="https://angelmsger.github.io/wecom-calendar-cli/cli/">
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="../">wecom-calendar-cli</a>
+    <div class="nav-links">
+      <a href="../">Home</a>
+      <a class="is-cli" href="../#commands">Commands</a>
+      <a href="https://github.com/angelmsger/wecom-calendar-cli">GitHub</a>
+    </div>
+  </div>
+</nav>
+<div class="layout">
+  <aside class="side">
+    <div class="side-group">
+      <div class="side-title">auth</div>
+      <a href="#wecom-calendar-cli-auth">wecom-calendar-cli auth</a>
+      <a href="#wecom-calendar-cli-auth-login">wecom-calendar-cli auth login</a>
+      <a href="#wecom-calendar-cli-auth-logout">wecom-calendar-cli auth logout</a>
+      <a href="#wecom-calendar-cli-auth-status">wecom-calendar-cli auth status</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">calendar</div>
+      <a href="#wecom-calendar-cli-calendar">wecom-calendar-cli calendar</a>
+      <a href="#wecom-calendar-cli-calendar-list">wecom-calendar-cli calendar list</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">config</div>
+      <a href="#wecom-calendar-cli-config">wecom-calendar-cli config</a>
+      <a href="#wecom-calendar-cli-config-delete-context">wecom-calendar-cli config delete-context</a>
+      <a href="#wecom-calendar-cli-config-get-contexts">wecom-calendar-cli config get-contexts</a>
+      <a href="#wecom-calendar-cli-config-init">wecom-calendar-cli config init</a>
+      <a href="#wecom-calendar-cli-config-path">wecom-calendar-cli config path</a>
+      <a href="#wecom-calendar-cli-config-show">wecom-calendar-cli config show</a>
+      <a href="#wecom-calendar-cli-config-use-context">wecom-calendar-cli config use-context</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">doctor</div>
+      <a href="#wecom-calendar-cli-doctor">wecom-calendar-cli doctor</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">event</div>
+      <a href="#wecom-calendar-cli-event">wecom-calendar-cli event</a>
+      <a href="#wecom-calendar-cli-event-list">wecom-calendar-cli event list</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">expand</div>
+      <a href="#wecom-calendar-cli-expand">wecom-calendar-cli expand</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">meta</div>
+      <a href="#wecom-calendar-cli-meta">wecom-calendar-cli meta</a>
+      <a href="#wecom-calendar-cli-meta-delete">wecom-calendar-cli meta delete</a>
+      <a href="#wecom-calendar-cli-meta-get">wecom-calendar-cli meta get</a>
+      <a href="#wecom-calendar-cli-meta-list">wecom-calendar-cli meta list</a>
+      <a href="#wecom-calendar-cli-meta-set">wecom-calendar-cli meta set</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">skill</div>
+      <a href="#wecom-calendar-cli-skill">wecom-calendar-cli skill</a>
+      <a href="#wecom-calendar-cli-skill-install">wecom-calendar-cli skill install</a>
+      <a href="#wecom-calendar-cli-skill-path">wecom-calendar-cli skill path</a>
+      <a href="#wecom-calendar-cli-skill-show">wecom-calendar-cli skill show</a>
+      <a href="#wecom-calendar-cli-skill-status">wecom-calendar-cli skill status</a>
+      <a href="#wecom-calendar-cli-skill-uninstall">wecom-calendar-cli skill uninstall</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">sync</div>
+      <a href="#wecom-calendar-cli-sync">wecom-calendar-cli sync</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">version</div>
+      <a href="#wecom-calendar-cli-version">wecom-calendar-cli version</a>
+      </div>
+    
+  </aside>
+  <main class="cli-main">
+    <span class="eyebrow">Reference</span>
+    <h1>CLI reference</h1>
+    <p class="lead">wecom-calendar-cli syncs your WeCom calendars over CalDAV into a local
+SQLite store, then serves fast, agent-friendly queries over that data.
+Events carry a free-form, agent-maintained metadata layer for your own
+classification and cross-tool task links. Output is JSON with structured
+errors.
+
+AGENT NOTE: a companion Skill (&#34;wecom-calendar&#34;) carries the canonical
+usage, safety modes, and setup and is the source of truth for driving this
+CLI. If you are an agent, load that Skill before composing commands. Check
+status with `wecom-calendar-cli skill status`; install it with
+`wecom-calendar-cli skill install`.</p>
+    <p class="lead">Generated from the command tree, so it always matches <code>--help</code>.</p>
+
+    <section class="cmd">
+      <h2>Global flags</h2>
+      <p class="short">Persistent flags accepted by every command.</p>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--allow-writes</code></td><td><code>false</code></td><td>override read-only mode (defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY) for this invocation</td></tr>
+        <tr><td><code>--base-url</code></td><td></td><td>CalDAV server URL (overrides config)</td></tr>
+        <tr><td><code>--config</code></td><td></td><td>config directory (default ~/.angelmsger/wecom-calendar)</td></tr>
+        <tr><td><code>--fields</code></td><td></td><td>comma-separated dot-path fields to keep</td></tr>
+        <tr><td><code>--format, -f</code></td><td></td><td>output format: json, table or ndjson</td></tr>
+        <tr><td><code>--pretty</code></td><td><code>false</code></td><td>human-friendly mode for interactive terminal use only (agents/scripts should omit): TUI in `config init`, colorized JSON elsewhere; errors without a TTY</td></tr>
+        <tr><td><code>--timeout</code></td><td></td><td>request timeout, e.g. 30s</td></tr>
+        <tr><td><code>--use-context</code></td><td></td><td>use a named context for this invocation</td></tr>
+        <tr><td><code>--verbose, -v</code></td><td><code>false</code></td><td>verbose diagnostics on stderr</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    
+    <section class="cmd" id="wecom-calendar-cli-auth">
+      <h2>wecom-calendar-cli auth</h2>
+      <p class="short">Inspect and manage stored credentials</p>
+      <pre>wecom-calendar-cli auth</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-auth-login">
+      <h2>wecom-calendar-cli auth login</h2>
+      <p class="short">Store a credential for the configured server</p>
+      <pre>wecom-calendar-cli auth login</pre>
+      <p class="long">Prompt for the app-specific password and store it securely. Run `config init` first if the server URL is not set.</p>
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli auth login
+  wecom-calendar-cli --use-context personal auth login</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-auth-logout">
+      <h2>wecom-calendar-cli auth logout</h2>
+      <p class="short">Remove the stored credential for the configured server</p>
+      <pre>wecom-calendar-cli auth logout</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-auth-status">
+      <h2>wecom-calendar-cli auth status</h2>
+      <p class="short">Show whether a usable credential is configured</p>
+      <pre>wecom-calendar-cli auth status</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-calendar">
+      <h2>wecom-calendar-cli calendar</h2>
+      <p class="short">List calendars</p>
+      <pre>wecom-calendar-cli calendar</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-calendar-list">
+      <h2>wecom-calendar-cli calendar list</h2>
+      <p class="short">List the calendars in the local store</p>
+      <pre>wecom-calendar-cli calendar list [flags]</pre>
+      <p class="long">List calendars from the local store, with id, display name and change
+tag. Use --refresh to query the server directly instead.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--refresh</code></td><td><code>false</code></td><td>query the server instead of the local store</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli calendar list
+  wecom-calendar-cli calendar list --refresh --format table</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config">
+      <h2>wecom-calendar-cli config</h2>
+      <p class="short">Manage wecom-calendar-cli configuration</p>
+      <pre>wecom-calendar-cli config</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config-delete-context">
+      <h2>wecom-calendar-cli config delete-context</h2>
+      <p class="short">Delete a context and its stored credential</p>
+      <pre>wecom-calendar-cli config delete-context &lt;name&gt;</pre>
+      
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli config delete-context personal</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config-get-contexts">
+      <h2>wecom-calendar-cli config get-contexts</h2>
+      <p class="short">List the configured contexts</p>
+      <pre>wecom-calendar-cli config get-contexts</pre>
+      <p class="long">List every context in the config file. The current context — the one
+used when --use-context is not given — is marked.</p>
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli config get-contexts
+  wecom-calendar-cli config get-contexts --format table</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config-init">
+      <h2>wecom-calendar-cli config init</h2>
+      <p class="short">Interactively set up the CalDAV server URL and credentials</p>
+      <pre>wecom-calendar-cli config init</pre>
+      <p class="long">Run the interactive setup wizard. It collects the CalDAV server URL,
+your WeCom email and app-specific password, validates them and stores
+the secret in the OS keychain. It can also configure additional named
+contexts for working with several accounts.</p>
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli config init --pretty   # interactive TUI (recommended)
+  wecom-calendar-cli config init             # plain line-by-line wizard (scripts, non-TTY)</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config-path">
+      <h2>wecom-calendar-cli config path</h2>
+      <p class="short">Print the config file path</p>
+      <pre>wecom-calendar-cli config path</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config-show">
+      <h2>wecom-calendar-cli config show</h2>
+      <p class="short">Show the resolved configuration</p>
+      <pre>wecom-calendar-cli config show [flags]</pre>
+      
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--explain</code></td><td><code>false</code></td><td>annotate each value with its source</td></tr>
+        </tbody>
+      </table>
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-config-use-context">
+      <h2>wecom-calendar-cli config use-context</h2>
+      <p class="short">Switch the current context</p>
+      <pre>wecom-calendar-cli config use-context &lt;name&gt;</pre>
+      <p class="long">Set the current context — the account used by default. Override it for
+a single command with the global --use-context flag instead.</p>
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli config use-context personal</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-doctor">
+      <h2>wecom-calendar-cli doctor</h2>
+      <p class="short">Diagnose configuration, credentials and connectivity</p>
+      <pre>wecom-calendar-cli doctor [flags]</pre>
+      
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--no-update-check</code></td><td><code>false</code></td><td>skip the check for a newer wecom-calendar-cli release</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli doctor
+  wecom-calendar-cli doctor --no-update-check</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-event">
+      <h2>wecom-calendar-cli event</h2>
+      <p class="short">Query calendar events</p>
+      <pre>wecom-calendar-cli event</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-event-list">
+      <h2>wecom-calendar-cli event list</h2>
+      <p class="short">List events in a time window from the local store</p>
+      <pre>wecom-calendar-cli event list [flags]</pre>
+      <p class="long">List events overlapping [--since, --until) from the local store. Dates
+are YYYY-MM-DD in the display timezone; --since defaults to 30 days ago
+and --until to 30 days ahead. Run `sync` first to populate the store; a
+staleness notice on stderr flags out-of-date data.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--calendar</code></td><td></td><td>restrict to one calendar id</td></tr>
+        <tr><td><code>--limit</code></td><td><code>0</code></td><td>cap the number of events returned (0 = no cap)</td></tr>
+        <tr><td><code>--since</code></td><td></td><td>start date YYYY-MM-DD (default 30 days ago)</td></tr>
+        <tr><td><code>--until</code></td><td></td><td>end date YYYY-MM-DD, exclusive (default 30 days ahead)</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31
+  wecom-calendar-cli event list --calendar 1688853806313356 --format table</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-expand">
+      <h2>wecom-calendar-cli expand</h2>
+      <p class="short">Rebuild the expanded event-instances view</p>
+      <pre>wecom-calendar-cli expand</pre>
+      <p class="long">Recompute event_instances from the stored events: expand recurring
+masters into occurrences (applying EXDATE and overrides) and fold the
+same event across calendars into one occurrence. Pure rebuild; runs
+automatically at the end of `sync`. Never touches your metadata.</p>
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-meta">
+      <h2>wecom-calendar-cli meta</h2>
+      <p class="short">Read and write custom, agent-maintained event metadata</p>
+      <pre>wecom-calendar-cli meta</pre>
+      <p class="long">A free-form key-value layer attached to events by uid, organized under
+namespaces. Use it for your own classification, notes, or links to tasks
+in any project-management tool — the schema assumes none. Sync never
+touches this layer, so re-syncing keeps your annotations.</p>
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-meta-delete">
+      <h2>wecom-calendar-cli meta delete</h2>
+      <p class="short">Delete a metadata entry</p>
+      <pre>wecom-calendar-cli meta delete &lt;uid&gt; &lt;namespace&gt; &lt;key&gt;</pre>
+      
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli meta delete &lt;uid&gt; task feishu_project</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-meta-get">
+      <h2>wecom-calendar-cli meta get</h2>
+      <p class="short">Get metadata for one event</p>
+      <pre>wecom-calendar-cli meta get &lt;uid&gt; [namespace] [key]</pre>
+      
+      
+      <h3>Examples</h3><pre>  wecom-calendar-cli meta get &lt;uid&gt;
+  wecom-calendar-cli meta get &lt;uid&gt; task</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-meta-list">
+      <h2>wecom-calendar-cli meta list</h2>
+      <p class="short">List metadata across events, filtered by uid/namespace/key</p>
+      <pre>wecom-calendar-cli meta list [flags]</pre>
+      
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--key</code></td><td></td><td>filter by key</td></tr>
+        <tr><td><code>--namespace</code></td><td></td><td>filter by namespace</td></tr>
+        <tr><td><code>--uid</code></td><td></td><td>filter by event uid</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli meta list --namespace task
+  wecom-calendar-cli meta list --key category</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-meta-set">
+      <h2>wecom-calendar-cli meta set</h2>
+      <p class="short">Set a metadata value on an event</p>
+      <pre>wecom-calendar-cli meta set &lt;uid&gt; &lt;namespace&gt; &lt;key&gt; &lt;value&gt; [flags]</pre>
+      <p class="long">Set metadata under (uid, namespace, key). The value is stored as JSON:
+a value that already parses as JSON is kept verbatim, otherwise it is
+stored as a JSON string.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--dry-run</code></td><td><code>false</code></td><td>show what would be written without writing</td></tr>
+        <tr><td><code>--source</code></td><td><code>agent</code></td><td>provenance tag: agent, user or auto</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli meta set &lt;uid&gt; classification category 评审
+  wecom-calendar-cli meta set &lt;uid&gt; task feishu_project g-5980639611
+  wecom-calendar-cli meta set &lt;uid&gt; note payload &#39;{&#34;minutes&#34;:30}&#39;</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-skill">
+      <h2>wecom-calendar-cli skill</h2>
+      <p class="short">Install the companion Skill for coding agents (Claude Code, Codex)</p>
+      <pre>wecom-calendar-cli skill</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-skill-install">
+      <h2>wecom-calendar-cli skill install</h2>
+      <p class="short">Deploy the embedded Skill into a coding agent&#39;s skills directory</p>
+      <pre>wecom-calendar-cli skill install [flags]</pre>
+      <p class="long">Write the companion `wecom-calendar` Skill — bundled inside this binary —
+into a coding agent&#39;s skills directory. With no flags it probes for
+installed agents (Claude Code, Codex) and installs into each one found.
+Re-run it after upgrading the CLI to refresh the Skill to the matching
+version.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--agent</code></td><td><code>[]</code></td><td>target agents instead of auto-detecting (claude-code, codex)</td></tr>
+        <tr><td><code>--dir</code></td><td></td><td>explicit skills base directory; installs into &lt;dir&gt;/wecom-calendar</td></tr>
+        <tr><td><code>--project</code></td><td><code>false</code></td><td>install into the project (./.claude/skills, ./.agents/skills) instead of $HOME</td></tr>
+        </tbody>
+      </table>
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-skill-path">
+      <h2>wecom-calendar-cli skill path</h2>
+      <p class="short">Print where the Skill would be installed, and whether it is</p>
+      <pre>wecom-calendar-cli skill path [flags]</pre>
+      
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--agent</code></td><td><code>[]</code></td><td>limit to specific agents (claude-code, codex)</td></tr>
+        <tr><td><code>--dir</code></td><td></td><td>explicit skills base directory</td></tr>
+        <tr><td><code>--project</code></td><td><code>false</code></td><td>use the project skills directories instead of $HOME</td></tr>
+        </tbody>
+      </table>
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-skill-show">
+      <h2>wecom-calendar-cli skill show</h2>
+      <p class="short">Print the embedded SKILL.md to stdout</p>
+      <pre>wecom-calendar-cli skill show</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-skill-status">
+      <h2>wecom-calendar-cli skill status</h2>
+      <p class="short">Report whether the companion Skill is loaded and installed</p>
+      <pre>wecom-calendar-cli skill status [flags]</pre>
+      
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--project</code></td><td><code>false</code></td><td>check the project skills dirs (./.claude/skills, ./.agents/skills) instead of $HOME</td></tr>
+        </tbody>
+      </table>
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-skill-uninstall">
+      <h2>wecom-calendar-cli skill uninstall</h2>
+      <p class="short">Remove the companion Skill from a coding agent&#39;s skills directory</p>
+      <pre>wecom-calendar-cli skill uninstall [flags]</pre>
+      <p class="long">Delete a previously installed `wecom-calendar` Skill. With no flags it
+probes for installed agents (Claude Code, Codex) and removes the Skill
+from each one found.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--agent</code></td><td><code>[]</code></td><td>target agents instead of auto-detecting (claude-code, codex)</td></tr>
+        <tr><td><code>--dir</code></td><td></td><td>explicit skills base directory; removes &lt;dir&gt;/wecom-calendar</td></tr>
+        <tr><td><code>--project</code></td><td><code>false</code></td><td>remove from the project (./.claude/skills, ./.agents/skills) instead of $HOME</td></tr>
+        </tbody>
+      </table>
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-sync">
+      <h2>wecom-calendar-cli sync</h2>
+      <p class="short">Sync WeCom calendars into the local store</p>
+      <pre>wecom-calendar-cli sync [flags]</pre>
+      <p class="long">Pull calendars and events over CalDAV into the local SQLite store.
+Incremental by default (calendars whose change-tag is unchanged are
+skipped); --full rescans everything. Idempotent: re-running is safe and
+leaves the data unchanged. This never touches your event metadata.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--calendar</code></td><td></td><td>sync only one calendar id</td></tr>
+        <tr><td><code>--dry-run</code></td><td><code>false</code></td><td>report which calendars would be scanned, without writing</td></tr>
+        <tr><td><code>--full</code></td><td><code>false</code></td><td>ignore change-tags and rescan every calendar</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli sync
+  wecom-calendar-cli sync --full
+  wecom-calendar-cli sync --calendar 1688853806313356 --dry-run</pre>
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-version">
+      <h2>wecom-calendar-cli version</h2>
+      <p class="short">Print version information</p>
+      <pre>wecom-calendar-cli version</pre>
+      
+      
+      
+    </section>
+    
+  </main>
+</div>
+<footer class="footer">
+  <div class="wrap">
+    <span class="brand-foot">wecom-calendar-cli — MIT License</span>
+    <span>Developer: <a href="https://angelmsger.github.io/">AngelMsger</a> · <a href="https://github.com/angelmsger/wecom-calendar-cli">GitHub</a></span>
+  </div>
+</footer>
+</body>
+</html>

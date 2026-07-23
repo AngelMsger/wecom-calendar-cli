@@ -1,0 +1,171 @@
+package app
+
+import (
+	"encoding/json"
+	"time"
+
+	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
+	"github.com/spf13/cobra"
+)
+
+func newMetaCmd(s *appState) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "meta",
+		Short: "Read and write custom, agent-maintained event metadata",
+		Long: "A free-form key-value layer attached to events by uid, organized under\n" +
+			"namespaces. Use it for your own classification, notes, or links to tasks\n" +
+			"in any project-management tool — the schema assumes none. Sync never\n" +
+			"touches this layer, so re-syncing keeps your annotations.",
+	}
+	cmd.AddCommand(newMetaSetCmd(s), newMetaGetCmd(s), newMetaListCmd(s), newMetaDeleteCmd(s))
+	return cmd
+}
+
+func newMetaSetCmd(s *appState) *cobra.Command {
+	var source string
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "set <uid> <namespace> <key> <value>",
+		Short: "Set a metadata value on an event",
+		Long: "Set metadata under (uid, namespace, key). The value is stored as JSON:\n" +
+			"a value that already parses as JSON is kept verbatim, otherwise it is\n" +
+			"stored as a JSON string.",
+		Example: "  wecom-calendar-cli meta set <uid> classification category 评审\n" +
+			"  wecom-calendar-cli meta set <uid> task feishu_project g-5980639611\n" +
+			"  wecom-calendar-cli meta set <uid> note payload '{\"minutes\":30}'",
+		Args: cobra.ExactArgs(4),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := s.guardWrite("meta set"); err != nil {
+				return err
+			}
+			uid, ns, key, value := args[0], args[1], args[2], args[3]
+			valueJSON := toJSONValue(value)
+			if dryRun {
+				return s.emit(map[string]any{"dry_run": true, "uid": uid, "namespace": ns,
+					"key": key, "value": json.RawMessage(valueJSON), "source": source})
+			}
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			exists, _ := st.EventExists(uid)
+			if err := st.MetaSet(uid, ns, key, valueJSON, source, time.Now()); err != nil {
+				return err
+			}
+			out := map[string]any{"uid": uid, "namespace": ns, "key": key,
+				"value": json.RawMessage(valueJSON), "source": source, "status": "set"}
+			if !exists {
+				out["warning"] = "no live event with this uid in the store (metadata kept anyway)"
+			}
+			return s.emit(out)
+		},
+	}
+	cmd.Flags().StringVar(&source, "source", "agent", "provenance tag: agent, user or auto")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be written without writing")
+	return cmd
+}
+
+func newMetaGetCmd(s *appState) *cobra.Command {
+	return &cobra.Command{
+		Use:     "get <uid> [namespace] [key]",
+		Short:   "Get metadata for one event",
+		Example: "  wecom-calendar-cli meta get <uid>\n  wecom-calendar-cli meta get <uid> task",
+		Args:    cobra.RangeArgs(1, 3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			uid := args[0]
+			ns, key := "", ""
+			if len(args) > 1 {
+				ns = args[1]
+			}
+			if len(args) > 2 {
+				key = args[2]
+			}
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			rows, err := st.MetaList(uid, ns, key)
+			if err != nil {
+				return err
+			}
+			return s.emitList(rows, pageInfo{})
+		},
+	}
+}
+
+func newMetaListCmd(s *appState) *cobra.Command {
+	var uid, ns, key string
+	cmd := &cobra.Command{
+		Use:     "list",
+		Short:   "List metadata across events, filtered by uid/namespace/key",
+		Example: "  wecom-calendar-cli meta list --namespace task\n  wecom-calendar-cli meta list --key category",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			rows, err := st.MetaList(uid, ns, key)
+			if err != nil {
+				return err
+			}
+			return s.emitList(rows, pageInfo{})
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&uid, "uid", "", "filter by event uid")
+	f.StringVar(&ns, "namespace", "", "filter by namespace")
+	f.StringVar(&key, "key", "", "filter by key")
+	return cmd
+}
+
+func newMetaDeleteCmd(s *appState) *cobra.Command {
+	return &cobra.Command{
+		Use:     "delete <uid> <namespace> <key>",
+		Short:   "Delete a metadata entry",
+		Example: "  wecom-calendar-cli meta delete <uid> task feishu_project",
+		Args:    cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := s.guardWrite("meta delete"); err != nil {
+				return err
+			}
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			n, err := st.MetaDelete(args[0], args[1], args[2])
+			if err != nil {
+				return err
+			}
+			status := "deleted"
+			if n == 0 {
+				status = "not_found"
+			}
+			return s.emit(map[string]any{"uid": args[0], "namespace": args[1],
+				"key": args[2], "status": status})
+		},
+	}
+}
+
+// guardWrite blocks a mutating command under the read-only posture.
+func (s *appState) guardWrite(op string) error {
+	if s.readOnly() {
+		return cerrors.Newf(cerrors.CategoryPermission, "READONLY_BLOCKED",
+			"%s is blocked by read-only mode", op).
+			WithHint("Pass --allow-writes, or unset defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY.")
+	}
+	return nil
+}
+
+// toJSONValue returns value if it is already valid JSON, else a JSON string.
+func toJSONValue(value string) string {
+	if json.Valid([]byte(value)) {
+		return value
+	}
+	b, _ := json.Marshal(value)
+	return string(b)
+}
