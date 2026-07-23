@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wecom-calendar-cli — CLI reference</title>
-<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='22' rx='4' fill='%230b0d12' stroke='%2307c160' stroke-width='2'/%3E%3Crect x='4' y='6' width='24' height='7' fill='%2307c160'/%3E%3Crect x='10' y='2' width='2' height='6' rx='1' fill='%2307c160'/%3E%3Crect x='20' y='2' width='2' height='6' rx='1' fill='%2307c160'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -293,31 +293,51 @@ a single command with the global --use-context flag instead.</p>
       <p class="long">List events overlapping [--since, --until) from the local store. Dates
 are YYYY-MM-DD in the display timezone; --since defaults to 30 days ago
 and --until to 30 days ahead. Run `sync` first to populate the store; a
-staleness notice on stderr flags out-of-date data.</p>
+staleness notice on stderr flags out-of-date data.
+
+Results are paginated: the JSON envelope carries `has_more` and a `next`
+cursor. Pass `--cursor &lt;next&gt;` to fetch the following page, or `--all` to
+return every match in one page (fine here since the query is local).</p>
       <h3>Options</h3>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
+        <tr><td><code>--all</code></td><td><code>false</code></td><td>return every match in one page (no pagination)</td></tr>
         <tr><td><code>--calendar</code></td><td></td><td>restrict to one calendar id</td></tr>
-        <tr><td><code>--limit</code></td><td><code>0</code></td><td>cap the number of events returned (0 = no cap)</td></tr>
+        <tr><td><code>--cursor</code></td><td></td><td>continue from a previous page&#39;s `next` cursor</td></tr>
+        <tr><td><code>--limit</code></td><td><code>0</code></td><td>page size (0 = default page size unless --all)</td></tr>
         <tr><td><code>--since</code></td><td></td><td>start date YYYY-MM-DD (default 30 days ago)</td></tr>
         <tr><td><code>--until</code></td><td></td><td>end date YYYY-MM-DD, exclusive (default 30 days ahead)</td></tr>
         </tbody>
       </table>
       <h3>Examples</h3><pre>  wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31
-  wecom-calendar-cli event list --calendar 1688853806313356 --format table</pre>
+  wecom-calendar-cli event list --calendar 1688853806313356 --format table
+  wecom-calendar-cli event list --since 2026-01-01 --until 2026-12-31 --all</pre>
     </section>
     
     <section class="cmd" id="wecom-calendar-cli-expand">
       <h2>wecom-calendar-cli expand</h2>
       <p class="short">Rebuild the expanded event-instances view</p>
-      <pre>wecom-calendar-cli expand</pre>
+      <pre>wecom-calendar-cli expand [flags]</pre>
       <p class="long">Recompute event_instances from the stored events: expand recurring
 masters into occurrences (applying EXDATE and overrides) and fold the
 same event across calendars into one occurrence. Pure rebuild; runs
-automatically at the end of `sync`. Never touches your metadata.</p>
-      
-      
+automatically at the end of `sync`. Never touches your metadata.
+
+Occurrences are expanded over a window (default 2 years back to 1 year
+ahead). Pass --since/--until to widen it when you need to query further
+into the past or future; a query beyond the window prints a coverage
+notice on stderr.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--since</code></td><td></td><td>expansion window start YYYY-MM-DD (default 2 years ago)</td></tr>
+        <tr><td><code>--until</code></td><td></td><td>expansion window end YYYY-MM-DD (default 1 year ahead)</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli expand
+  wecom-calendar-cli expand --since 2018-01-01 --until 2030-01-01</pre>
     </section>
     
     <section class="cmd" id="wecom-calendar-cli-meta">
@@ -335,10 +355,18 @@ touches this layer, so re-syncing keeps your annotations.</p>
     <section class="cmd" id="wecom-calendar-cli-meta-delete">
       <h2>wecom-calendar-cli meta delete</h2>
       <p class="short">Delete a metadata entry</p>
-      <pre>wecom-calendar-cli meta delete &lt;uid&gt; &lt;namespace&gt; &lt;key&gt;</pre>
+      <pre>wecom-calendar-cli meta delete &lt;uid&gt; &lt;namespace&gt; &lt;key&gt; [flags]</pre>
       
-      
-      <h3>Examples</h3><pre>  wecom-calendar-cli meta delete &lt;uid&gt; task feishu_project</pre>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--dry-run</code></td><td><code>false</code></td><td>show what would be deleted without deleting</td></tr>
+        <tr><td><code>--yes</code></td><td><code>false</code></td><td>confirm the deletion (required for non-interactive use)</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli meta delete &lt;uid&gt; task feishu_project --dry-run
+  wecom-calendar-cli meta delete &lt;uid&gt; task feishu_project --yes</pre>
     </section>
     
     <section class="cmd" id="wecom-calendar-cli-meta-get">

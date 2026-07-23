@@ -123,17 +123,63 @@ func (s *Store) UpsertCalendar(id, href, name, ctag string, now time.Time) error
 	return err
 }
 
-func (s *Store) SoftDeleteCalendarsNotIn(keep []string, now time.Time) error {
-	iso, ms := isoMs(now)
-	q := `UPDATE calendars SET deleted_at=?, deleted_at_ms=? WHERE deleted_at IS NULL`
-	args := []any{iso, ms}
+// SoftDeleteCalendarsNotIn soft-deletes calendars absent from keep (the current
+// server listing) and returns their ids so the caller can cascade the deletion
+// to their resources and events.
+func (s *Store) SoftDeleteCalendarsNotIn(keep []string, now time.Time) ([]string, error) {
+	sel := `SELECT calendar_id FROM calendars WHERE deleted_at IS NULL`
+	var selArgs []any
 	if len(keep) > 0 {
-		q += " AND calendar_id NOT IN (" + placeholders(len(keep)) + ")"
+		sel += " AND calendar_id NOT IN (" + placeholders(len(keep)) + ")"
 		for _, k := range keep {
-			args = append(args, k)
+			selArgs = append(selArgs, k)
 		}
 	}
-	_, err := s.db.Exec(q, args...)
+	rows, err := s.db.Query(sel, selArgs...)
+	if err != nil {
+		return nil, err
+	}
+	var gone []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		gone = append(gone, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	iso, ms := isoMs(now)
+	for _, id := range gone {
+		if _, err := s.db.Exec(
+			`UPDATE calendars SET deleted_at=?, deleted_at_ms=? WHERE calendar_id=?`,
+			iso, ms, id); err != nil {
+			return nil, err
+		}
+	}
+	return gone, nil
+}
+
+// SoftDeleteCalendarContents cascades a calendar's disappearance to its live
+// resources and events, and drops its sync state so that if the calendar later
+// reappears (even with an unchanged ctag) it is fully re-scanned rather than
+// skipped with its rows left tombstoned.
+func (s *Store) SoftDeleteCalendarContents(calID string, now time.Time) error {
+	iso, ms := isoMs(now)
+	if _, err := s.db.Exec(
+		`UPDATE calendar_resources SET deleted_at=?, deleted_at_ms=?
+		 WHERE calendar_id=? AND deleted_at IS NULL`, iso, ms, calID); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(
+		`UPDATE calendar_events SET deleted_at=?, deleted_at_ms=?
+		 WHERE calendar_id=? AND deleted_at IS NULL`, iso, ms, calID); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM caldav_sync_state WHERE calendar_id=?`, calID)
 	return err
 }
 
@@ -258,16 +304,20 @@ func (s *Store) UpsertEvent(e EventInput, now time.Time, runID int64) error {
 }
 
 // SoftDeleteHrefEventsNotIn soft-deletes events under one resource whose
-// recurrence key is not in keep (an override removed from the .ics).
-func (s *Store) SoftDeleteHrefEventsNotIn(calID, href string, keep []string, now time.Time) (int, error) {
+// (uid, recurrence_id_key) pair is not in keep — an override removed from the
+// .ics, or the whole prior event when a resource is rewritten to a different
+// UID. Matching on the composite key (not recurrence_id_key alone) is essential:
+// a master and a new master both key on the empty recurrence id, so comparing
+// only recurrence keys would leave the old UID's master live as a ghost.
+func (s *Store) SoftDeleteHrefEventsNotIn(calID, href string, keep [][2]string, now time.Time) (int, error) {
 	iso, ms := isoMs(now)
 	q := `UPDATE calendar_events SET deleted_at=?, deleted_at_ms=?
 	      WHERE calendar_id=? AND source_href=? AND deleted_at IS NULL`
 	args := []any{iso, ms, calID, href}
 	if len(keep) > 0 {
-		q += " AND recurrence_id_key NOT IN (" + placeholders(len(keep)) + ")"
+		q += " AND (uid || char(31) || recurrence_id_key) NOT IN (" + placeholders(len(keep)) + ")"
 		for _, k := range keep {
-			args = append(args, k)
+			args = append(args, k[0]+"\x1f"+k[1])
 		}
 	}
 	res, err := s.db.Exec(q, args...)

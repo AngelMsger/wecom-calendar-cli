@@ -1,19 +1,17 @@
 package app
 
-import "os"
+import (
+	"os"
 
-// isTerminal reports whether f is an interactive terminal. Uses the file's
-// stat mode rather than syscalls so behaviour is consistent with stdin checks
-// elsewhere in the project.
+	"golang.org/x/term"
+)
+
+// isTerminal reports whether f is an interactive terminal. It uses a real
+// isatty check (not a ModeCharDevice heuristic, which also matches /dev/null and
+// other character devices) so the destructive-write confirmation gate and secret
+// prompts treat a redirected or piped stdin as non-interactive.
 func isTerminal(f *os.File) bool {
-	if f == nil {
-		return false
-	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return f != nil && term.IsTerminal(int(f.Fd()))
 }
 
 func stdinIsTTY() bool  { return isTerminal(os.Stdin) }

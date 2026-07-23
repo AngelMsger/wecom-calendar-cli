@@ -63,7 +63,7 @@ away.
 <summary><strong>Other install methods</strong> — go install, source build, prebuilt binary</summary>
 
 ```bash
-go install github.com/angelmsger/wecom-calendar-cli/cmd/wecom-calendar-cli@latest   # go 1.24+
+go install github.com/angelmsger/wecom-calendar-cli/cmd/wecom-calendar-cli@latest   # go 1.25+
 make install                                                                        # from a source checkout
 ```
 
@@ -156,9 +156,11 @@ server soft-deletes its row but leaves its metadata resolvable by UID.
 The only writes are `meta set` and `meta delete`. Both accept `--dry-run`
 (preview without applying) and honor a session read-only posture
 (`defaults.read_only` / `WECOM_CALENDAR_CLI_READ_ONLY=1`, overridable per
-invocation with `--allow-writes`). `sync` is a read against the server and a
-write to the store's synced facts only — it is not blocked by read-only mode and
-never touches metadata.
+invocation with `--allow-writes`). `meta delete` is destructive, so applying it
+also requires `--yes` (or an interactive confirmation); a non-interactive caller
+must pass `--yes`. `sync` is a read against the server and a write to the store's
+synced facts only — it is not blocked by read-only mode and never touches
+metadata.
 
 ## Errors and exit codes
 

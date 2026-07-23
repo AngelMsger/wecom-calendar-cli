@@ -2,8 +2,10 @@ package app
 
 import (
 	"os"
+	"strconv"
 	"time"
 
+	expandpkg "github.com/angelmsger/wecom-calendar-cli/internal/expand"
 	"github.com/angelmsger/wecom-calendar-cli/internal/output"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
@@ -48,6 +50,38 @@ func (s *appState) staleNotice(st *store.Store) {
 			"stale": map[string]any{
 				"last_sync_at": lastISO,
 				"message":      "local data may be stale; run `wecom-calendar-cli sync`",
+			},
+		},
+	})
+}
+
+// coverageNotice emits a stderr notice when a query window reaches beyond the
+// window the derived instances were expanded over. Recurring occurrences past
+// the expansion window are absent, so without this an out-of-range query would
+// look empty rather than under-covered. It never touches stdout.
+func (s *appState) coverageNotice(st *store.Store, since, until time.Time) {
+	startStr, ok1, err1 := st.GetSyncMeta(expandpkg.MetaCoveredStartMs)
+	endStr, ok2, err2 := st.GetSyncMeta(expandpkg.MetaCoveredEndMs)
+	if err1 != nil || err2 != nil || !ok1 || !ok2 {
+		return
+	}
+	coveredStart, e1 := strconv.ParseInt(startStr, 10, 64)
+	coveredEnd, e2 := strconv.ParseInt(endStr, 10, 64)
+	if e1 != nil || e2 != nil {
+		return
+	}
+	qStart := since.UTC().UnixMilli()
+	qEnd := until.UTC().UnixMilli()
+	if qStart >= coveredStart && qEnd <= coveredEnd {
+		return // fully within the expanded window
+	}
+	output.EmitNotice(os.Stderr, map[string]any{
+		"_notice": map[string]any{
+			"partial_coverage": map[string]any{
+				"covered_from": time.UnixMilli(coveredStart).UTC().Format(time.RFC3339),
+				"covered_to":   time.UnixMilli(coveredEnd).UTC().Format(time.RFC3339),
+				"message": "query window extends beyond expanded coverage; recurring events outside it are omitted. " +
+					"Widen it with `wecom-calendar-cli expand --since <date> --until <date>`.",
 			},
 		},
 	})

@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"time"
 
@@ -20,6 +21,9 @@ type Options struct {
 	RetryBaseDelay time.Duration
 	// Decorators are applied to every request in order.
 	Decorators []Decorator
+	// Verbose, when non-nil, receives a one-line log of every request's method,
+	// URL and status (used by --verbose). Headers and bodies are never logged.
+	Verbose io.Writer
 }
 
 // Client is a retrying HTTP client. It is flavor-agnostic: callers build fully
@@ -45,6 +49,9 @@ func New(opt Options) *Client {
 			timeout = constants.DefaultTimeout
 		}
 		c.doer = &http.Client{Timeout: timeout}
+	}
+	if opt.Verbose != nil {
+		c.doer = &loggingDoer{inner: c.doer, w: opt.Verbose}
 	}
 	if c.baseDelay == 0 {
 		c.baseDelay = 500 * time.Millisecond

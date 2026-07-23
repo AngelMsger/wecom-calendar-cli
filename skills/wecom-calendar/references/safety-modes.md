@@ -41,6 +41,18 @@ wecom-calendar-cli meta set <uid> task feishu_project 6949886165 --dry-run
 Use it before any write whose target (`uid`, namespace, key) was inferred
 rather than pasted in literally — confirm the UID matches the event you mean.
 
+## `--yes` — confirm a destructive delete
+
+`meta delete` removes a metadata entry, so applying it (outside `--dry-run`)
+requires confirmation. With a terminal it prompts `[y/N]`; without one — the
+usual case for an agent — it refuses with `CONFIRM_REQUIRED` unless you pass
+`--yes`. The safe pattern is preview then confirm:
+
+```bash
+wecom-calendar-cli meta delete <uid> task feishu_project --dry-run   # preview
+wecom-calendar-cli meta delete <uid> task feishu_project --yes       # apply
+```
+
 ## Read-only mode — lock the session
 
 A session-level switch that blocks every metadata write before it touches the
@@ -98,6 +110,6 @@ enabled read-only would lose the ability to recover or refresh:
    any accidental `meta` write hits `READONLY_BLOCKED` before touching the store.
 2. Before a `meta set` / `meta delete` whose target you inferred, run it with
    `--dry-run` and confirm the UID and (namespace, key).
-3. The two compose: `WECOM_CALENDAR_CLI_READ_ONLY=1 wecom-calendar-cli
+3. They compose: `WECOM_CALENDAR_CLI_READ_ONLY=1 wecom-calendar-cli
    --allow-writes meta delete <uid> task feishu_project --dry-run` previews the
-   delete without applying it.
+   delete without applying it; drop `--dry-run` and add `--yes` to apply.

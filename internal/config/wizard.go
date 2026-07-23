@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
+	"golang.org/x/term"
 )
 
 // WizardHooks lets the caller plug live behaviour into the init wizard without
@@ -405,14 +407,45 @@ func (p *PlainDriver) AskSelect(label string, items []SelectItem, def string) (s
 }
 
 func (p *PlainDriver) AskSecret(label string) (string, error) {
-	return p.text(label, "", "", true), nil
+	for {
+		v, ok := p.readSecret(label)
+		if !ok {
+			// Non-TTY input (piped) has no hidden read; fall back to a line read.
+			return p.text(label, "", "", true), nil
+		}
+		if v != "" {
+			return v, nil
+		}
+		fmt.Fprintln(p.Out, "  value is required")
+	}
 }
 
 func (p *PlainDriver) AskSecretOptional(label string) (string, bool, error) {
-	fmt.Fprintf(p.Out, "%s [press Enter to keep current]: ", label)
+	prompt := label + " [press Enter to keep current]"
+	if v, ok := p.readSecret(prompt); ok {
+		return v, v == "", nil
+	}
+	fmt.Fprintf(p.Out, "%s: ", prompt)
 	line, _ := p.reader().ReadString('\n')
 	line = strings.TrimSpace(line)
 	return line, line == "", nil
+}
+
+// readSecret reads a secret without echoing when the input is an interactive
+// terminal, returning ok=false when it is not (piped/redirected input, where a
+// hidden read is impossible and the caller should fall back to a line read).
+func (p *PlainDriver) readSecret(label string) (string, bool) {
+	f, ok := p.In.(*os.File)
+	if !ok || !term.IsTerminal(int(f.Fd())) {
+		return "", false
+	}
+	fmt.Fprintf(p.Out, "%s: ", label)
+	b, err := term.ReadPassword(int(f.Fd()))
+	fmt.Fprintln(p.Out)
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(b)), true
 }
 
 func (p *PlainDriver) AskConfirm(label string, def bool) (bool, error) {

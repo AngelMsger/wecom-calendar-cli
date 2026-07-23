@@ -1,7 +1,11 @@
 package app
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
@@ -35,14 +39,16 @@ func newMetaSetCmd(s *appState) *cobra.Command {
 			"  wecom-calendar-cli meta set <uid> note payload '{\"minutes\":30}'",
 		Args: cobra.ExactArgs(4),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := s.guardWrite("meta set"); err != nil {
-				return err
-			}
 			uid, ns, key, value := args[0], args[1], args[2], args[3]
 			valueJSON := toJSONValue(value)
+			// --dry-run previews the write and must work even under read-only mode
+			// (it changes nothing), so it is checked before the write gate.
 			if dryRun {
 				return s.emit(map[string]any{"dry_run": true, "uid": uid, "namespace": ns,
 					"key": key, "value": json.RawMessage(valueJSON), "source": source})
+			}
+			if err := s.guardWrite("meta set"); err != nil {
+				return err
 			}
 			st, err := s.openStore()
 			if err != nil {
@@ -123,21 +129,60 @@ func newMetaListCmd(s *appState) *cobra.Command {
 }
 
 func newMetaDeleteCmd(s *appState) *cobra.Command {
-	return &cobra.Command{
-		Use:     "delete <uid> <namespace> <key>",
-		Short:   "Delete a metadata entry",
-		Example: "  wecom-calendar-cli meta delete <uid> task feishu_project",
-		Args:    cobra.ExactArgs(3),
+	var dryRun, yes bool
+	cmd := &cobra.Command{
+		Use:   "delete <uid> <namespace> <key>",
+		Short: "Delete a metadata entry",
+		Example: "  wecom-calendar-cli meta delete <uid> task feishu_project --dry-run\n" +
+			"  wecom-calendar-cli meta delete <uid> task feishu_project --yes",
+		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			uid, ns, key := args[0], args[1], args[2]
+			// --dry-run resolves and previews the delete (including the current
+			// value, if any) without removing anything, and works under read-only.
+			if dryRun {
+				st, err := s.openStore()
+				if err != nil {
+					return err
+				}
+				defer st.Close()
+				rows, err := st.MetaList(uid, ns, key)
+				if err != nil {
+					return err
+				}
+				out := map[string]any{"dry_run": true, "uid": uid, "namespace": ns, "key": key}
+				if len(rows) > 0 {
+					out["status"] = "would_delete"
+					out["current_value"] = rows[0].Value
+				} else {
+					out["status"] = "not_found"
+				}
+				return s.emit(out)
+			}
 			if err := s.guardWrite("meta delete"); err != nil {
 				return err
+			}
+			// Destructive write: require --yes, or an interactive confirmation. A
+			// non-interactive caller (agent/script) must pass --yes; we never block
+			// on a prompt without a TTY. Mirrors the family's confirmation gate.
+			if !yes {
+				if !stdinIsTTY() {
+					return cerrors.New(cerrors.CategoryUsage, "CONFIRM_REQUIRED",
+						"meta delete removes data; pass --yes to confirm, or --dry-run to preview").
+						WithHint("Agents and scripts should preview with --dry-run, then delete with --yes.")
+				}
+				fmt.Fprintf(os.Stderr, "Delete metadata %s / %s / %s? [y/N]: ", uid, ns, key)
+				line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+				if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+					return s.emit(map[string]any{"uid": uid, "namespace": ns, "key": key, "status": "aborted"})
+				}
 			}
 			st, err := s.openStore()
 			if err != nil {
 				return err
 			}
 			defer st.Close()
-			n, err := st.MetaDelete(args[0], args[1], args[2])
+			n, err := st.MetaDelete(uid, ns, key)
 			if err != nil {
 				return err
 			}
@@ -145,10 +190,14 @@ func newMetaDeleteCmd(s *appState) *cobra.Command {
 			if n == 0 {
 				status = "not_found"
 			}
-			return s.emit(map[string]any{"uid": args[0], "namespace": args[1],
-				"key": args[2], "status": status})
+			return s.emit(map[string]any{"uid": uid, "namespace": ns,
+				"key": key, "status": status})
 		},
 	}
+	f := cmd.Flags()
+	f.BoolVar(&dryRun, "dry-run", false, "show what would be deleted without deleting")
+	f.BoolVar(&yes, "yes", false, "confirm the deletion (required for non-interactive use)")
+	return cmd
 }
 
 // guardWrite blocks a mutating command under the read-only posture.

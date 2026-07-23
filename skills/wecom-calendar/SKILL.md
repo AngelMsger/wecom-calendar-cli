@@ -69,8 +69,9 @@ wecom-calendar-cli version | completion | skill install|status
 ```
 
 `sync` and the query commands are reads against the store; only `meta set` and
-`meta delete` write. Both writes accept `--dry-run` and honor read-only mode.
-See [safety-modes.md](references/safety-modes.md).
+`meta delete` write. Both accept `--dry-run` and honor read-only mode;
+`meta delete` is destructive, so it also needs `--yes` (or an interactive
+confirmation) to apply. See [safety-modes.md](references/safety-modes.md).
 
 ## Event UIDs — the metadata key
 

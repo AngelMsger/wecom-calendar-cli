@@ -9,6 +9,7 @@ import (
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newAuthCmd(s *appState) *cobra.Command {
@@ -81,7 +82,11 @@ func newAuthLoginCmd(s *appState) *cobra.Command {
 				cred.Username = ask(r, "WeCom email")
 			}
 			fmt.Fprintln(os.Stderr, "Note: fetching a new password in WeCom invalidates the previous one.")
-			cred.Secret = ask(r, "App-specific password")
+			secret, err := askSecret("App-specific password")
+			if err != nil {
+				return err
+			}
+			cred.Secret = secret
 			if err := cred.Validate(); err != nil {
 				return err
 			}
@@ -127,4 +132,18 @@ func ask(r *bufio.Reader, label string) string {
 	fmt.Fprintf(os.Stderr, "%s: ", label)
 	line, _ := r.ReadString('\n')
 	return strings.TrimSpace(line)
+}
+
+// askSecret reads a secret without echoing it. auth login already requires an
+// interactive stdin, so terminal input is expected; the prompt and the trailing
+// newline go to stderr to keep stdout clean.
+func askSecret(label string) (string, error) {
+	fmt.Fprintf(os.Stderr, "%s: ", label)
+	b, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", cerrors.Wrap(err, cerrors.CategoryConfig, "READ_SECRET",
+			"could not read the password from the terminal")
+	}
+	return strings.TrimSpace(string(b)), nil
 }

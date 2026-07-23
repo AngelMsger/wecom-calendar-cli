@@ -13,12 +13,15 @@ type MasterRow struct {
 
 // MastersForExpansion returns every live master event (recurrence_id_key=”)
 // with the data needed to expand it. A uid may appear under several calendars.
+// Events under a soft-deleted calendar are excluded so a calendar that vanished
+// from the server never contributes occurrences to the derived view.
 func (s *Store) MastersForExpansion() ([]MasterRow, error) {
 	rows, err := s.db.Query(
-		`SELECT uid, calendar_id, raw_ics, COALESCE(sequence,0), COALESCE(last_modified_at_ms,0)
-		 FROM calendar_events
-		 WHERE deleted_at IS NULL AND recurrence_id_key='' AND raw_ics<>''
-		 ORDER BY uid, calendar_id`)
+		`SELECT e.uid, e.calendar_id, e.raw_ics, COALESCE(e.sequence,0), COALESCE(e.last_modified_at_ms,0)
+		 FROM calendar_events e
+		 JOIN calendars c ON c.calendar_id = e.calendar_id AND c.deleted_at IS NULL
+		 WHERE e.deleted_at IS NULL AND e.recurrence_id_key='' AND e.raw_ics<>''
+		 ORDER BY e.uid, e.calendar_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -74,37 +77,55 @@ func (s *Store) InsertInstance(r InstanceRow) error {
 	return err
 }
 
-// QueryInstances returns expanded occurrences overlapping [sinceMs, untilMs),
-// optionally restricted to a calendar (matched against primary/source).
-func (s *Store) QueryInstances(sinceMs, untilMs int64, calID string) ([]InstanceOut, error) {
+// QueryInstances returns expanded occurrences that overlap the half-open window
+// [sinceMs, untilMs) — every occurrence whose interval [start, effective_end)
+// intersects the window, not only those that start inside it, so a meeting that
+// began before the window but is still running is included. effective_end is the
+// stored end, or an instant just after start for a zero-duration occurrence.
+// Results are returned in a stable total order and paginated by offset/limit;
+// when limit > 0, hasMore reports whether rows remain past the page.
+func (s *Store) QueryInstances(sinceMs, untilMs int64, calID string, offset, limit int) (out []InstanceOut, hasMore bool, err error) {
 	q := `SELECT uid, occurrence_key, primary_calendar_id, COALESCE(source_calendar_ids,'[]'),
 	         source_count, COALESCE(summary,''), COALESCE(start_at,''), COALESCE(end_at,''),
 	         all_day, COALESCE(status,''), COALESCE(local_date,'')
 	      FROM event_instances
-	      WHERE start_at_ms >= ? AND start_at_ms < ?`
-	args := []any{sinceMs, untilMs}
+	      WHERE start_at_ms < ?
+	        AND (CASE WHEN end_at_ms IS NULL OR end_at_ms <= start_at_ms
+	                  THEN start_at_ms + 1 ELSE end_at_ms END) > ?`
+	args := []any{untilMs, sinceMs}
 	if calID != "" {
 		q += " AND (primary_calendar_id=? OR source_calendar_ids LIKE ?)"
 		args = append(args, calID, "%\""+calID+"\"%")
 	}
-	q += " ORDER BY start_at_ms"
+	q += " ORDER BY start_at_ms, uid, occurrence_key"
+	if limit > 0 {
+		// Fetch one extra row to detect a following page without a second query.
+		q += " LIMIT ? OFFSET ?"
+		args = append(args, limit+1, offset)
+	}
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
-	var out []InstanceOut
 	for rows.Next() {
 		var i InstanceOut
 		var allDay int
 		if err := rows.Scan(&i.UID, &i.OccurrenceKey, &i.PrimaryCalendarID, &i.SourceCalendarIDs,
 			&i.SourceCount, &i.Summary, &i.Start, &i.End, &allDay, &i.Status, &i.LocalDate); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		i.AllDay = allDay != 0
 		out = append(out, i)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+		hasMore = true
+	}
+	return out, hasMore, nil
 }
 
 // InstanceOut is an occurrence for query output.

@@ -8,11 +8,19 @@ package expand
 
 import (
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/ical"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	"github.com/teambition/rrule-go"
+)
+
+// Metadata keys recording the window the derived instances currently cover, so
+// a query outside it can warn instead of silently returning nothing.
+const (
+	MetaCoveredStartMs = "expand_covered_start_ms"
+	MetaCoveredEndMs   = "expand_covered_end_ms"
 )
 
 // maxInstancesPerEvent caps expansion of a single unbounded rule so a stray
@@ -79,6 +87,14 @@ func Rebuild(st *store.Store, opts Options) (int, error) {
 			total++
 		}
 	}
+	// Record the covered window so queries beyond it can flag partial coverage
+	// rather than mistaking an empty result for "no events".
+	if err := st.SetSyncMeta(MetaCoveredStartMs, strconv.FormatInt(opts.Since.UTC().UnixMilli(), 10)); err != nil {
+		return total, err
+	}
+	if err := st.SetSyncMeta(MetaCoveredEndMs, strconv.FormatInt(opts.Until.UTC().UnixMilli(), 10)); err != nil {
+		return total, err
+	}
 	return total, nil
 }
 
@@ -93,6 +109,12 @@ func expandOccurrences(master ical.Event, overrides map[string]ical.Event, opts 
 	duration := time.Duration(0)
 	if !master.End.IsZero() && !master.Start.IsZero() {
 		duration = master.End.Sub(master.Start)
+	}
+	// RFC 5545: an all-day (DATE) event with no DTEND/DURATION lasts one day.
+	// Without this an all-day event would collapse to a zero-length instant and
+	// be missed by an overlap query on any day but its start.
+	if master.AllDay && duration <= 0 {
+		duration = 24 * time.Hour
 	}
 	exset := map[string]bool{}
 	for _, k := range master.ExDates {

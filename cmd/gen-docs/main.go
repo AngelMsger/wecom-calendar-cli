@@ -222,7 +222,7 @@ const htmlTemplate = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wecom-calendar-cli — CLI reference</title>
-<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='22' rx='4' fill='%230b0d12' stroke='%2307c160' stroke-width='2'/%3E%3Crect x='4' y='6' width='24' height='7' fill='%2307c160'/%3E%3Crect x='10' y='2' width='2' height='6' rx='1' fill='%2307c160'/%3E%3Crect x='20' y='2' width='2' height='6' rx='1' fill='%2307c160'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">

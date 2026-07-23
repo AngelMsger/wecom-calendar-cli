@@ -22,10 +22,23 @@ var idempotentMethods = map[string]bool{
 // doWithRetry runs req, retrying transient failures for idempotent methods.
 // A transient HTTP status that exhausts retries is returned to the caller as a
 // normal response for status classification.
+//
+// Requests with a body (PROPFIND/REPORT carry XML) can only be retried if the
+// body is replayable: the first Do consumes and closes req.Body, so before each
+// subsequent attempt we reset it from req.GetBody. http.NewRequest populates
+// GetBody for the in-memory body types this package uses (strings/bytes
+// readers), so retries send the full body, not an empty one.
 func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
 	idempotent := idempotentMethods[req.Method]
 
 	for attempt := 0; ; attempt++ {
+		if attempt > 0 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = body
+		}
 		resp, err := c.doer.Do(req)
 		if err == nil && !isTransientStatus(resp.StatusCode) {
 			return resp, nil

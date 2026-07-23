@@ -1,6 +1,7 @@
 package caldav
 
 import (
+	"io"
 	"net/url"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ type BuildParams struct {
 	// AuthDecorator injects the Authorization header. May be nil for anonymous
 	// probes (which will fail against a real server).
 	AuthDecorator transport.Decorator
+	// Verbose, when non-nil, receives a per-request exchange log (--verbose).
+	Verbose io.Writer
 }
 
 // Build constructs a Client from params, deriving the request origin from the
@@ -46,6 +49,8 @@ func Build(p BuildParams) (Client, error) {
 		Timeout:    p.Timeout,
 		MaxRetries: p.MaxRetries,
 		Decorators: decorators,
+		Verbose:    p.Verbose,
 	})
-	return &apiClient{origin: u.Scheme + "://" + u.Host, http: tc}, nil
+	base := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/"}
+	return &apiClient{origin: u.Scheme + "://" + u.Host, base: base, http: tc}, nil
 }

@@ -74,6 +74,30 @@ func (s *Store) MetaDelete(uid, ns, key string) (int, error) {
 	return int(n), nil
 }
 
+// SetSyncMeta upserts a key into the internal metadata table. This is sync/
+// expand bookkeeping (e.g. the expanded coverage window); it is distinct from
+// the agent-owned event_metadata layer that MetaSet writes.
+func (s *Store) SetSyncMeta(key, value string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO metadata(key, value) VALUES(?,?)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+	return err
+}
+
+// GetSyncMeta returns an internal metadata value and whether it was present.
+func (s *Store) GetSyncMeta(key string) (string, bool, error) {
+	row := s.db.QueryRow(`SELECT value FROM metadata WHERE key=?`, key)
+	var v string
+	switch err := row.Scan(&v); err {
+	case nil:
+		return v, true, nil
+	case sql.ErrNoRows:
+		return "", false, nil
+	default:
+		return "", false, err
+	}
+}
+
 // EventExists reports whether a live master event with the given uid exists, so
 // meta writes can warn about attaching to an unknown event.
 func (s *Store) EventExists(uid string) (bool, error) {

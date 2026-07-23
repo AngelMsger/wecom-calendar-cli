@@ -74,8 +74,16 @@ func Run(ctx context.Context, client caldav.Client, st *store.Store, opts Option
 	for _, c := range cals {
 		keep = append(keep, c.ID)
 	}
-	if err := st.SoftDeleteCalendarsNotIn(keep, now); err != nil {
+	gone, err := st.SoftDeleteCalendarsNotIn(keep, now)
+	if err != nil {
 		return finalize(store.SyncStats{}, err)
+	}
+	// Cascade each vanished calendar's deletion to its resources and events, so
+	// a removed calendar's occurrences stop appearing in queries.
+	for _, id := range gone {
+		if err := st.SoftDeleteCalendarContents(id, now); err != nil {
+			return finalize(store.SyncStats{}, err)
+		}
 	}
 
 	var stats store.SyncStats
@@ -151,30 +159,43 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 	}
 	wg.Wait()
 
-	// Serial write phase (SQLite is single-writer).
+	// Serial write phase (SQLite is single-writer). clean tracks whether every
+	// listed resource was fetched AND parsed; if not, we withhold the ctag below
+	// so the next sync re-lists and retries instead of skipping the calendar.
+	clean := true
 	for _, r := range results {
 		if r.err != nil {
 			// A resource the server listed but cannot serve (a 404 from its
-			// inconsistent backend) must not abort the calendar; keep the row.
+			// inconsistent backend) must not abort the calendar; keep the row and
+			// force a re-list next time. Once the server stops listing it, the
+			// not-seen sweep below tombstones it.
 			if cerrors.AsCLIError(r.err).Category == cerrors.CategoryNotFound {
 				_ = st.AddWarning(runID, "resource_unfetchable", r.ref.Href, now)
 				_ = st.TouchResource(cal.ID, r.ref.Href, now)
+				clean = false
 				continue
 			}
 			return r.err
+		}
+		// Parse BEFORE recording the resource's etag/content. If parsing fails we
+		// deliberately do not advance the etag (so a --full sync re-fetches it)
+		// and set clean=false (so an incremental sync re-lists the calendar);
+		// otherwise the event would be dropped now and then permanently skipped.
+		evs, err := ical.Parse(r.ics, opts.Loc)
+		if err != nil {
+			_ = st.AddWarning(runID, "resource_unparseable", r.ref.Href, now)
+			_ = st.TouchResource(cal.ID, r.ref.Href, now)
+			clean = false
+			continue
 		}
 		stats.ResourcesFetched++
 		sum := sha256.Sum256([]byte(r.ics))
 		if err := st.UpsertResourceContent(cal.ID, r.ref.Href, r.etag, hex.EncodeToString(sum[:]), len(r.ics), now, runID); err != nil {
 			return err
 		}
-		evs, err := ical.Parse(r.ics, opts.Loc)
-		if err != nil {
-			continue // a single unparseable resource must not abort the calendar
-		}
-		keep := make([]string, 0, len(evs))
+		keep := make([][2]string, 0, len(evs))
 		for _, ev := range evs {
-			keep = append(keep, ev.RecurrenceIDKey)
+			keep = append(keep, [2]string{ev.UID, ev.RecurrenceIDKey})
 			if err := st.UpsertEvent(toInput(cal.ID, r.ref.Href, ev, r.ics), now, runID); err != nil {
 				return err
 			}
@@ -187,11 +208,11 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		stats.EventsSoftDeleted += n
 	}
 
-	gone, err := st.SoftDeleteResourcesNotSeen(cal.ID, runStartMs, now)
+	goneRes, err := st.SoftDeleteResourcesNotSeen(cal.ID, runStartMs, now)
 	if err != nil {
 		return err
 	}
-	for _, h := range gone {
+	for _, h := range goneRes {
 		n, err := st.SoftDeleteEventsByHref(cal.ID, h, now)
 		if err != nil {
 			return err
@@ -199,9 +220,13 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		stats.EventsSoftDeleted += n
 	}
 
-	// Commit the ctag only after every resource for this calendar landed, so an
-	// interruption re-scans next time rather than skipping missed changes.
-	return st.SetCalendarState(cal.ID, cal.Ctag, now)
+	// Commit the ctag only after every resource for this calendar landed AND
+	// parsed, so an interruption or a bad resource re-scans next time rather than
+	// being skipped by an advanced change-tag.
+	if clean {
+		return st.SetCalendarState(cal.ID, cal.Ctag, now)
+	}
+	return nil
 }
 
 // toInput maps a parsed event plus its full resource ICS into a store input.

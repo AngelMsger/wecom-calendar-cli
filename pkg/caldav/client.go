@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -35,7 +36,8 @@ type Client interface {
 }
 
 type apiClient struct {
-	origin string // scheme://host, no trailing slash
+	origin string   // scheme://host, no trailing slash
+	base   *url.URL // origin as a URL (path "/"), for same-origin href resolution
 	http   *transport.Client
 }
 
@@ -97,7 +99,11 @@ func (c *apiClient) ListEvents(ctx context.Context, calendarHref string, since, 
 }
 
 func (c *apiClient) GetEvent(ctx context.Context, href string) (RawEvent, error) {
-	req, err := http.NewRequest(http.MethodGet, c.absURL(href), nil)
+	target, err := c.resolveURL(href)
+	if err != nil {
+		return RawEvent{}, err
+	}
+	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		return RawEvent{}, cerrors.Wrap(err, cerrors.CategoryInternal, "REQUEST", "could not build request")
 	}
@@ -115,7 +121,11 @@ func (c *apiClient) GetEvent(ctx context.Context, href string) (RawEvent, error)
 
 // dav issues a WebDAV request expecting a 207 multistatus and returns the body.
 func (c *apiClient) dav(ctx context.Context, method, path, body, depth string) ([]byte, http.Header, error) {
-	req, err := http.NewRequest(method, c.absURL(path), strings.NewReader(body))
+	target, err := c.resolveURL(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := http.NewRequest(method, target, strings.NewReader(body))
 	if err != nil {
 		return nil, nil, cerrors.Wrap(err, cerrors.CategoryInternal, "REQUEST", "could not build request")
 	}
@@ -146,15 +156,27 @@ func (c *apiClient) statusError(status int, body []byte) error {
 	return e
 }
 
-// absURL resolves a server path (or absolute URL) to a full request URL.
-func (c *apiClient) absURL(pathOrURL string) string {
-	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
-		return pathOrURL
+// resolveURL turns a server-supplied href (a path, or an absolute URL echoed
+// back in a multistatus) into a full request URL, and refuses to leave the
+// configured origin. CalDAV responses can carry absolute hrefs; without this
+// guard a server (or a MITM injecting a redirect-like href) could point a
+// resource at another host and the transport's auth decorator would send the
+// Basic app password there. Credentials must only ever reach the configured
+// server, so a cross-origin href is a hard error rather than a followed link.
+func (c *apiClient) resolveURL(href string) (string, error) {
+	ref, err := url.Parse(strings.TrimSpace(href))
+	if err != nil {
+		return "", cerrors.Newf(cerrors.CategoryParse, "CALDAV_BAD_HREF",
+			"the server returned an unparseable resource href %q", href)
 	}
-	if !strings.HasPrefix(pathOrURL, "/") {
-		pathOrURL = "/" + pathOrURL
+	abs := c.base.ResolveReference(ref)
+	if abs.Scheme != c.base.Scheme || !strings.EqualFold(abs.Host, c.base.Host) {
+		return "", cerrors.Newf(cerrors.CategoryParse, "CALDAV_CROSS_ORIGIN",
+			"refusing a CalDAV href on a different origin (%s://%s) than the configured server (%s://%s)",
+			abs.Scheme, abs.Host, c.base.Scheme, c.base.Host).
+			WithHint("Credentials are only ever sent to the configured server. If this host is legitimate, set it as the base URL.")
 	}
-	return c.origin + pathOrURL
+	return abs.String(), nil
 }
 
 // lastSegment returns the final non-empty path segment of an href.

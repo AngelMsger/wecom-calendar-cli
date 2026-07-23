@@ -2,8 +2,11 @@
 -- Three layers: raw facts (calendars/resources/events/attendees), sync audit
 -- (sync_runs/sync_warnings/caldav_sync_state/metadata), and derived data
 -- (event_instances). event_metadata is a separate, agent-owned layer that sync
--- never touches. All tables use CREATE ... IF NOT EXISTS; column additions are
--- handled by a PRAGMA table_info migration in Go.
+-- never touches. Every statement uses CREATE ... IF NOT EXISTS and is applied on
+-- each Open, so a fresh database is created and an existing one is left intact.
+-- There is no column-level migration yet: additive columns on an already-created
+-- database are not auto-applied. Introduce a versioned migration step here before
+-- shipping a schema change that alters an existing table.
 
 -- ============ meta ============
 CREATE TABLE IF NOT EXISTS metadata (
