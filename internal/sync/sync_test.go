@@ -118,6 +118,45 @@ func TestSyncUnfetchable404WithholdsCtag(t *testing.T) {
 	}
 }
 
+// TestSyncEmitsBoundedProgress: a sync reports its scale up front and one
+// milestone per scanned calendar, without a per-resource flood.
+func TestSyncEmitsBoundedProgress(t *testing.T) {
+	st := openStore(t)
+	c := &fakeClient{
+		calendars: []caldav.Calendar{{ID: "c1", Href: "/calendar/c1/", Ctag: "ctag1"}},
+		refs:      map[string][]caldav.EventRef{"/calendar/c1/": {{Href: "/calendar/c1/u1.ics", Etag: "e1"}}},
+		bodies:    map[string]caldav.RawEvent{"/calendar/c1/u1.ics": {Href: "/calendar/c1/u1.ics", Etag: "e1", ICS: goodICS}},
+	}
+	var events []ProgressEvent
+	_, err := Run(context.Background(), c, st, Options{
+		Since:    time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+		Until:    time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+		Loc:      time.UTC,
+		Progress: func(ev ProgressEvent) { events = append(events, ev) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotStart, gotDone bool
+	for _, e := range events {
+		if e.Phase == ProgressStart && e.CalendarsTotal == 1 {
+			gotStart = true
+		}
+		if e.Phase == ProgressCalendarDone && e.CalendarID == "c1" && e.EventsUpserted >= 1 {
+			gotDone = true
+		}
+	}
+	if !gotStart {
+		t.Errorf("want a start event reporting the scale, got %+v", events)
+	}
+	if !gotDone {
+		t.Errorf("want a calendar_done milestone for c1, got %+v", events)
+	}
+	if len(events) > 5 {
+		t.Errorf("progress must be bounded (no per-resource flood), got %d events", len(events))
+	}
+}
+
 // TestSyncCascadesRemovedCalendar guards the ghost-calendar bug: when a calendar
 // disappears from the server, its events must stop appearing (be soft-deleted),
 // not linger in queries.

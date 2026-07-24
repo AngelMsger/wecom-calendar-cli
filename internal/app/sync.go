@@ -11,7 +11,7 @@ import (
 
 func newSyncCmd(s *appState) *cobra.Command {
 	var full, dryRun bool
-	var calendarID string
+	var calendarID, progressMode string
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Sync WeCom calendars into the local store",
@@ -88,13 +88,16 @@ func newSyncCmd(s *appState) *cobra.Command {
 			defer st.Close()
 
 			loc := displayLoc()
+			progress, finishProgress := s.syncProgress(progressMode)
 			res, err := syncpkg.Run(ctx, client, st, syncpkg.Options{
 				Full:       full,
 				CalendarID: calendarID,
 				Since:      syncWindowStart(),
 				Until:      syncWindowEnd(),
 				Loc:        loc,
+				Progress:   progress,
 			})
+			finishProgress()
 			if err != nil {
 				return err
 			}
@@ -120,6 +123,8 @@ func newSyncCmd(s *appState) *cobra.Command {
 	f.BoolVar(&full, "full", false, "ignore change-tags and rescan every calendar")
 	f.BoolVar(&dryRun, "dry-run", false, "report which calendars would be scanned, without writing")
 	f.StringVar(&calendarID, "calendar", "", "sync only one calendar id")
+	f.StringVar(&progressMode, "progress", "auto", "progress on stderr: auto (a live line on a terminal, bounded JSON notices otherwise), none, or json")
+	enumComplete(cmd, "progress", "auto", "none", "json")
 	return cmd
 }
 

@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	stdsync "sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/ical"
@@ -22,6 +23,35 @@ import (
 // pool keeps sync brisk without hammering the backend.
 const fetchWorkers = 8
 
+// fetchHeartbeat bounds how long a single large calendar can pull in silence:
+// while its events are being fetched, a progress event fires at least this
+// often, so a 2000-event calendar never looks hung.
+const fetchHeartbeat = 5 * time.Second
+
+// ProgressPhase names a point in a sync worth reporting.
+const (
+	ProgressStart        = "start"         // scale is known: N calendars to consider
+	ProgressFetching     = "fetching"      // heartbeat while a calendar's events download
+	ProgressCalendarDone = "calendar_done" // a calendar finished scanning
+)
+
+// ProgressEvent is a bounded liveness signal emitted during a sync. It is
+// deliberately coarse — one at start, one per scanned calendar, plus a timed
+// heartbeat inside a long calendar — so a caller (human or agent) sees the sync
+// is alive without the per-request firehose of --verbose. The renderer decides
+// how to present it; sync stays UI-agnostic. Not every field is set every phase
+// (see comments).
+type ProgressEvent struct {
+	Phase            string
+	CalendarsTotal   int    // all phases
+	CalendarsScanned int    // calendar_done: how many scanned so far
+	CalendarID       string // fetching/calendar_done
+	CalendarName     string // fetching/calendar_done
+	Fetched          int    // fetching: done so far in this calendar; calendar_done: cumulative resources fetched
+	Total            int    // fetching: resources to fetch in this calendar
+	EventsUpserted   int    // calendar_done: cumulative
+}
+
 // Options configures a sync run.
 type Options struct {
 	Full       bool           // ignore ctag; rescan every calendar
@@ -29,6 +59,10 @@ type Options struct {
 	Since      time.Time      // full-listing window start
 	Until      time.Time      // full-listing window end
 	Loc        *time.Location // display timezone for parsing
+	// Progress, when non-nil, receives bounded liveness events. It is called
+	// from a single goroutine at a time (never concurrently), so the callback
+	// needs no locking.
+	Progress func(ProgressEvent)
 }
 
 // Result summarizes a sync run.
@@ -50,6 +84,11 @@ func Run(ctx context.Context, client caldav.Client, st *store.Store, opts Option
 		mode = "full"
 	}
 	res := Result{Mode: mode}
+	emitProgress := func(ev ProgressEvent) {
+		if opts.Progress != nil {
+			opts.Progress(ev)
+		}
+	}
 
 	runID, err := st.BeginSyncRun(mode, now)
 	if err != nil {
@@ -86,6 +125,10 @@ func Run(ctx context.Context, client caldav.Client, st *store.Store, opts Option
 		}
 	}
 
+	// Report the scale as soon as it is known — the cheapest possible signal,
+	// and it tells the caller whether this run is a big pull or a quick check.
+	emitProgress(ProgressEvent{Phase: ProgressStart, CalendarsTotal: len(cals)})
+
 	var stats store.SyncStats
 	for _, cal := range cals {
 		if opts.CalendarID != "" && cal.ID != opts.CalendarID {
@@ -104,6 +147,11 @@ func Run(ctx context.Context, client caldav.Client, st *store.Store, opts Option
 		if err := scanCalendar(ctx, client, st, cal, opts, now, runStartMs, runID, &stats); err != nil {
 			return finalize(stats, err)
 		}
+		// One milestone per calendar actually scanned (ctag-skipped calendars are
+		// instant and stay silent), so a full pull emits ~one line per calendar.
+		emitProgress(ProgressEvent{Phase: ProgressCalendarDone, CalendarsTotal: len(cals),
+			CalendarsScanned: stats.CalendarsScanned, CalendarID: cal.ID, CalendarName: cal.DisplayName,
+			Fetched: stats.ResourcesFetched, EventsUpserted: stats.EventsUpserted})
 	}
 	return finalize(stats, nil)
 }
@@ -141,6 +189,11 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		err  error
 	}
 	results := make([]fetched, len(toFetch))
+	// Heartbeat: while this calendar's events download, report liveness on a
+	// timer so even a calendar with thousands of events never goes silent.
+	var fetchedCount int64
+	stopHeartbeat := startFetchHeartbeat(opts.Progress, cal, len(toFetch), &fetchedCount)
+
 	sem := make(chan struct{}, fetchWorkers)
 	var wg stdsync.WaitGroup
 	for i, ref := range toFetch {
@@ -155,9 +208,11 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 				etag = ref.Etag
 			}
 			results[i] = fetched{ref: ref, ics: raw.ICS, etag: etag, err: err}
+			atomic.AddInt64(&fetchedCount, 1)
 		}(i, ref)
 	}
 	wg.Wait()
+	stopHeartbeat()
 
 	// Serial write phase (SQLite is single-writer). clean tracks whether every
 	// listed resource was fetched AND parsed; if not, we withhold the ctag below
@@ -227,6 +282,39 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		return st.SetCalendarState(cal.ID, cal.Ctag, now)
 	}
 	return nil
+}
+
+// startFetchHeartbeat runs a timer that emits a fetching progress event every
+// fetchHeartbeat until stopped. The returned stop function closes the timer and
+// blocks until its goroutine has exited, so no event fires after it returns —
+// keeping Progress calls serialized with the caller. A nil callback or an empty
+// fetch set makes it a no-op.
+func startFetchHeartbeat(progress func(ProgressEvent), cal caldav.Calendar, total int, counter *int64) func() {
+	if progress == nil || total == 0 {
+		return func() {}
+	}
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(fetchHeartbeat)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				progress(ProgressEvent{
+					Phase:        ProgressFetching,
+					CalendarID:   cal.ID,
+					CalendarName: cal.DisplayName,
+					Fetched:      int(atomic.LoadInt64(counter)),
+					Total:        total,
+				})
+			}
+		}
+	}()
+	var once stdsync.Once
+	return func() { once.Do(func() { close(stop); <-done }) }
 }
 
 // toInput maps a parsed event plus its full resource ICS into a store input.

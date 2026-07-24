@@ -22,7 +22,10 @@ Every query command (`calendar list`, `event list`, `meta get/list`) reads the
 
 1. Run `wecom-calendar-cli sync` first (or when data may be stale). It pulls
    CalDAV changes into SQLite incrementally and idempotently; it **never**
-   touches the metadata layer.
+   touches the metadata layer. A first/`--full` sync can run a while and emits
+   bounded `{"_notice":{"progress":…}}` liveness on **stderr** — that is not the
+   result (the result is the final JSON on stdout); silence it with
+   `--progress none`.
 2. Then query. If a read prints a `{"_notice":{"stale":…}}` line on **stderr**,
    the store is behind the server — re-run `sync` and query again.
 
@@ -57,8 +60,8 @@ Do not reach for a non-existent "live query" flag: the freshness contract is
 ## Commands
 
 ```
-wecom-calendar-cli sync [--full] [--calendar id] [--dry-run]
-                                       # CalDAV -> local SQLite (incremental)
+wecom-calendar-cli sync [--full] [--calendar id] [--dry-run] [--progress auto|none|json]
+                                       # CalDAV -> local SQLite (incremental); bounded progress on stderr
 wecom-calendar-cli calendar list [--refresh]
                                        # calendars from the store (--refresh: server)
 wecom-calendar-cli event list --since YYYY-MM-DD --until YYYY-MM-DD \

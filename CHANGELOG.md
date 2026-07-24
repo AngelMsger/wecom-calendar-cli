@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configured account). `--occurrence <occurrence_key>` applies a recurring
   event's per-date RECURRENCE-ID overrides; `--include-meta` attaches its
   annotations. Closes the loop from `event list` (find a uid) to full detail.
+- **`sync --progress auto|none|json`** — bounded liveness on stderr so a long
+  first/`--full` sync never looks hung: a single self-updating line on a
+  terminal, or structured `{"_notice":{"progress":…}}` notices for agents/pipes
+  (one at start, one per scanned calendar, plus a timed heartbeat inside a large
+  calendar). stdout stays byte-stable; distinct from the `--verbose`
+  per-request log.
 - **`whoami`** — the configured account (normalized email), so an agent can
   subtract "me" from an event's attendees.
 - **`meta list --value <v>`** — reverse lookup: which events carry a given value

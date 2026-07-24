@@ -9,7 +9,22 @@ wecom-calendar-cli sync                       # incremental sync of every calend
 wecom-calendar-cli sync --calendar <id>       # just one calendar
 wecom-calendar-cli sync --full                # ignore change-tags, reconcile all
 wecom-calendar-cli sync --dry-run             # report what would change, write nothing
+wecom-calendar-cli sync --progress none       # silence the progress notices
 ```
+
+## Progress — sync can take a while, and says so
+
+A first `sync` (or `--full`) pulls the full history one `.ics` at a time and can
+run for a while, so it reports **bounded** progress on **stderr** — never a
+per-request flood. `--progress` is `auto` by default: a single self-updating
+status line on an interactive terminal, or, for an agent/pipe, structured
+notices — one at the start (`{"phase":"start","calendars_total":N}`), one per
+scanned calendar, and a timed heartbeat inside a large calendar so it never goes
+silent. **stdout is untouched** — it still carries only the final JSON summary,
+so treat a `{"_notice":{"progress":…}}` line as liveness, not a result. Use
+`--progress none` to silence it, or `--progress json` to force notices on a
+terminal. (Distinct from `--verbose`, which logs every HTTP request for
+debugging — far more output, opt-in only.)
 
 ## Incremental by default
 
