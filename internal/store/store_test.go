@@ -130,7 +130,7 @@ func TestMetadataSurvivesResync(t *testing.T) {
 	if err := st.UpsertEvent(ev, now.Add(time.Hour), run); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := st.MetaList("u1", "", "")
+	rows, err := st.MetaList("u1", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

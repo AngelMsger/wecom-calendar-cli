@@ -49,6 +49,23 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
+// OpenReadOnly opens an existing store read-only: it neither creates the file
+// nor runs the schema, so callers (e.g. --dry-run previews) touch nothing on
+// disk. It errors if the database does not exist; callers should check
+// existence first and preview against empty state when it is absent.
+func OpenReadOnly(path string) (*Store, error) {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("PRAGMA busy_timeout=30000"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("pragma busy_timeout: %w", err)
+	}
+	return &Store{db: db}, nil
+}
+
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 

@@ -71,14 +71,14 @@ make test         # go test ./...
 make cross        # cross-compile dist/ for all platforms
 ```
 
-Go 1.24, `CGO_ENABLED=0` (pure-Go SQLite via modernc.org/sqlite). Version is
-injected via ldflags into `pkg/constants`.
+Go 1.25 (`go.mod`), `CGO_ENABLED=0` (pure-Go SQLite via modernc.org/sqlite).
+Version is injected via ldflags into `pkg/constants`.
 
 ## Status
 
-Built and verified against the live server: config/auth/doctor, sync
-(incremental + idempotent), calendar/event query, and the metadata layer.
-Remaining before this reaches the family Definition of Done: recurrence
-expansion into `event_instances` with cross-calendar dedup (`internal/expand`),
-and the P5 convergence pass (companion Skill, generated docs, CI workflows,
-update-notice, and a full cross-project consistency check).
+Feature-complete against the family Definition of Done: config/auth/doctor,
+sync (incremental + idempotent, ctag + etag), recurrence expansion into
+`event_instances` with cross-calendar dedup (`internal/expand`), the
+agent-owned metadata layer, companion Skill, generated CLI docs, update-notice,
+CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on Linux + Windows runtime),
+and npm distribution. All of it verified against the live WeCom server.

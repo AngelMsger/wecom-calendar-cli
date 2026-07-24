@@ -9,6 +9,7 @@
 package ical
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -71,12 +72,23 @@ func Parse(ics string, defaultLoc *time.Location) ([]Event, error) {
 	var out []Event
 	for i := range cal.Events() {
 		ev := cal.Events()[i]
-		out = append(out, parseEvent(&ev, tz, defaultLoc))
+		parsed, err := parseEvent(&ev, tz, defaultLoc)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, parsed)
 	}
 	return out, nil
 }
 
-func parseEvent(ev *goical.Event, tz tzMap, defaultLoc *time.Location) Event {
+// parseEvent maps one VEVENT to an Event. It returns an error on semantic
+// failures — a missing UID, an unparseable DTSTART/DTEND, or an invalid
+// RECURRENCE-ID/RRULE — rather than silently degrading to zero values. That
+// matters because sync treats an unparseable resource as unfetched (withholding
+// the calendar ctag) instead of committing a degenerate event and dropping the
+// real one; e.g. an unparseable RECURRENCE-ID would otherwise collapse an
+// override into a master and collide with the true master on (uid, "").
+func parseEvent(ev *goical.Event, tz tzMap, defaultLoc *time.Location) (Event, error) {
 	e := Event{
 		UID:         text(ev.Props, "UID"),
 		Summary:     text(ev.Props, goical.PropSummary),
@@ -85,6 +97,9 @@ func parseEvent(ev *goical.Event, tz tzMap, defaultLoc *time.Location) Event {
 		Status:      strings.ToUpper(text(ev.Props, goical.PropStatus)),
 		Organizer:   cleanMailto(text(ev.Props, "ORGANIZER")),
 	}
+	if e.UID == "" {
+		return e, fmt.Errorf("ical: VEVENT missing UID")
+	}
 	if seq := text(ev.Props, "SEQUENCE"); seq != "" {
 		e.Sequence, _ = strconv.Atoi(seq)
 	}
@@ -92,23 +107,35 @@ func parseEvent(ev *goical.Event, tz tzMap, defaultLoc *time.Location) Event {
 		e.LastModified, _, _ = parseValue(lm, tz, defaultLoc)
 	}
 
-	if p := ev.Props.Get(goical.PropDateTimeStart); p != nil {
-		e.Start, e.AllDay, _ = parseValue(p, tz, defaultLoc)
+	p := ev.Props.Get(goical.PropDateTimeStart)
+	if p == nil {
+		return e, fmt.Errorf("ical: VEVENT %q missing DTSTART", e.UID)
+	}
+	var err error
+	if e.Start, e.AllDay, err = parseValue(p, tz, defaultLoc); err != nil {
+		return e, fmt.Errorf("ical: VEVENT %q DTSTART %q: %w", e.UID, p.Value, err)
 	}
 	if p := ev.Props.Get(goical.PropDateTimeEnd); p != nil {
-		e.End, _, _ = parseValue(p, tz, defaultLoc)
+		if e.End, _, err = parseValue(p, tz, defaultLoc); err != nil {
+			return e, fmt.Errorf("ical: VEVENT %q DTEND %q: %w", e.UID, p.Value, err)
+		}
 	}
 
 	if p := ev.Props.Get("RECURRENCE-ID"); p != nil {
 		t, allDay, err := parseValue(p, tz, defaultLoc)
-		if err == nil {
-			e.RecurrenceIDRaw = p.Value
-			e.RecurrenceIDKey = OccurrenceKey(t, allDay)
+		if err != nil {
+			return e, fmt.Errorf("ical: VEVENT %q RECURRENCE-ID %q: %w", e.UID, p.Value, err)
 		}
+		e.RecurrenceIDRaw = p.Value
+		e.RecurrenceIDKey = OccurrenceKey(t, allDay)
 	}
 	if p := ev.Props.Get("RRULE"); p != nil {
 		e.RRule = p.Value
-		if opt, err := ev.Props.RecurrenceRule(); err == nil && opt != nil {
+		opt, err := ev.Props.RecurrenceRule()
+		if err != nil {
+			return e, fmt.Errorf("ical: VEVENT %q RRULE %q: %w", e.UID, p.Value, err)
+		}
+		if opt != nil {
 			if !e.Start.IsZero() {
 				opt.Dtstart = e.Start
 			}
@@ -130,7 +157,7 @@ func parseEvent(ev *goical.Event, tz tzMap, defaultLoc *time.Location) Event {
 			ResponseStatus: p.Params.Get("PARTSTAT"),
 		})
 	}
-	return e
+	return e, nil
 }
 
 // parseValue parses a DATE or DATE-TIME prop, resolving TZID against the

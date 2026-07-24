@@ -31,8 +31,12 @@ func (s *Store) MetaSet(uid, ns, key, valueJSON, source string, now time.Time) e
 	return err
 }
 
-// MetaList returns entries filtered by any non-empty of uid/ns/key.
-func (s *Store) MetaList(uid, ns, key string) ([]MetaRow, error) {
+// MetaList returns entries filtered by any non-empty of uid/ns/key, and — when
+// value is non-empty — restricted to entries whose stored JSON value contains
+// that substring. The value filter powers reverse lookups ("which events are
+// linked to task X"): it matches the raw value_json, so a bare id like `G123`
+// finds both a scalar `"G123"` and a structured `{"id":"G123"}`.
+func (s *Store) MetaList(uid, ns, key, value string) ([]MetaRow, error) {
 	q := `SELECT uid, namespace, key, value_json, source, COALESCE(updated_at,'')
 	      FROM event_metadata WHERE 1=1`
 	var args []any
@@ -43,6 +47,10 @@ func (s *Store) MetaList(uid, ns, key string) ([]MetaRow, error) {
 			q += " AND " + f.col + "=?"
 			args = append(args, f.val)
 		}
+	}
+	if value != "" {
+		q += " AND value_json LIKE '%' || ? || '%'"
+		args = append(args, value)
 	}
 	q += " ORDER BY uid, namespace, key"
 	rows, err := s.db.Query(q, args...)
@@ -59,6 +67,38 @@ func (s *Store) MetaList(uid, ns, key string) ([]MetaRow, error) {
 		}
 		m.Value = json.RawMessage(val)
 		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// MetaForUIDs returns metadata for a set of uids grouped by uid, in one query,
+// so `event list --include-meta` can attach each event's annotations without an
+// N+1 fan-out. uids with no metadata are simply absent from the map.
+func (s *Store) MetaForUIDs(uids []string) (map[string][]MetaRow, error) {
+	out := map[string][]MetaRow{}
+	if len(uids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(uids))
+	for i, u := range uids {
+		args[i] = u
+	}
+	rows, err := s.db.Query(
+		`SELECT uid, namespace, key, value_json, source, COALESCE(updated_at,'')
+		   FROM event_metadata WHERE uid IN (`+placeholders(len(uids))+`)
+		  ORDER BY uid, namespace, key`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m MetaRow
+		var val string
+		if err := rows.Scan(&m.UID, &m.Namespace, &m.Key, &val, &m.Source, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		m.Value = json.RawMessage(val)
+		out[m.UID] = append(out[m.UID], m)
 	}
 	return out, rows.Err()
 }

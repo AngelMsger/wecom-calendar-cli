@@ -120,6 +120,7 @@ func newRootCmdWithState() (*cobra.Command, *appState) {
 		newMetaCmd(state),
 		newConfigCmd(state),
 		newAuthCmd(state),
+		newWhoamiCmd(state),
 		newDoctorCmd(state),
 		newSkillCmd(state),
 		newVersionCmd(),

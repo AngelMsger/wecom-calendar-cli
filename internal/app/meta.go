@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -92,7 +93,7 @@ func newMetaGetCmd(s *appState) *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			rows, err := st.MetaList(uid, ns, key)
+			rows, err := st.MetaList(uid, ns, key, "")
 			if err != nil {
 				return err
 			}
@@ -102,19 +103,24 @@ func newMetaGetCmd(s *appState) *cobra.Command {
 }
 
 func newMetaListCmd(s *appState) *cobra.Command {
-	var uid, ns, key string
+	var uid, ns, key, value string
 	cmd := &cobra.Command{
-		Use:     "list",
-		Short:   "List metadata across events, filtered by uid/namespace/key",
-		Example: "  wecom-calendar-cli meta list --namespace task\n  wecom-calendar-cli meta list --key category",
-		Args:    cobra.NoArgs,
+		Use:   "list",
+		Short: "List metadata across events, filtered by uid/namespace/key/value",
+		Long: "List custom metadata entries. Filter by any of --uid/--namespace/--key,\n" +
+			"and by --value to reverse-look-up which events carry a given value —\n" +
+			"e.g. `--value G123` finds every event linked to that task.",
+		Example: "  wecom-calendar-cli meta list --namespace task\n" +
+			"  wecom-calendar-cli meta list --key category\n" +
+			"  wecom-calendar-cli meta list --value g-5980639611",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			st, err := s.openStore()
 			if err != nil {
 				return err
 			}
 			defer st.Close()
-			rows, err := st.MetaList(uid, ns, key)
+			rows, err := st.MetaList(uid, ns, key, value)
 			if err != nil {
 				return err
 			}
@@ -125,6 +131,7 @@ func newMetaListCmd(s *appState) *cobra.Command {
 	f.StringVar(&uid, "uid", "", "filter by event uid")
 	f.StringVar(&ns, "namespace", "", "filter by namespace")
 	f.StringVar(&key, "key", "", "filter by key")
+	f.StringVar(&value, "value", "", "filter by value (substring of the stored JSON)")
 	return cmd
 }
 
@@ -139,16 +146,19 @@ func newMetaDeleteCmd(s *appState) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			uid, ns, key := args[0], args[1], args[2]
 			// --dry-run resolves and previews the delete (including the current
-			// value, if any) without removing anything, and works under read-only.
+			// value, if any) without removing anything or creating the store on
+			// disk, and works under read-only.
 			if dryRun {
-				st, err := s.openStore()
+				st, exists, err := s.openStoreForRead()
 				if err != nil {
 					return err
 				}
-				defer st.Close()
-				rows, err := st.MetaList(uid, ns, key)
-				if err != nil {
-					return err
+				var rows []store.MetaRow
+				if exists {
+					defer st.Close()
+					if rows, err = st.MetaList(uid, ns, key, ""); err != nil {
+						return err
+					}
 				}
 				out := map[string]any{"dry_run": true, "uid": uid, "namespace": ns, "key": key}
 				if len(rows) > 0 {

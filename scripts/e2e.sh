@@ -58,6 +58,17 @@ assert_stdout_contains "meta delete --dry-run works under read-only" '"dry_run"'
 "${base[@]}" meta delete uid ns key </dev/null >/dev/null 2>&1
 [ $? = 2 ] && pass "meta delete without --yes -> confirm required (exit 2)" \
             || bad "meta delete without --yes -> confirm required (want exit 2)"
+# --dry-run must not create the database on a pristine config dir (write nothing).
+FRESH="$WORK/fresh"; mkdir -p "$FRESH"
+"$BIN" --config "$FRESH" meta delete uid ns key --dry-run >/dev/null 2>&1
+[ ! -e "$FRESH/calendar.db" ] && pass "dry-run creates no database" \
+                              || bad "dry-run created a database (should write nothing)"
+# identity primitive and rich single-event read.
+assert_stdout_contains "whoami reports identity" '"configured"' -- "${base[@]}" whoami
+assert_exit 6 "event get unknown uid -> not found" -- "${base[@]}" event get no-such-uid
+assert_stdout_contains "event list --status accepted" '"items"' -- "${base[@]}" event list --status confirmed,tentative
+assert_stdout_contains "event list --include-meta accepted" '"items"' -- "${base[@]}" event list --include-meta
+assert_stdout_contains "meta list --value reverse lookup" '"items"' -- "${base[@]}" meta list --value anything
 # malformed input is a structured usage error (exit 2), not a crash.
 assert_exit 2 "unknown flag -> usage error"  -- "${base[@]}" event list --nope
 assert_exit 2 "bad --cursor -> usage error"  -- "${base[@]}" event list --cursor not-a-cursor

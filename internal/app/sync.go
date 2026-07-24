@@ -32,16 +32,20 @@ func newSyncCmd(s *appState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st, err := s.openStore()
-			if err != nil {
-				return err
-			}
-			defer st.Close()
 
 			if dryRun {
 				cals, err := client.ListCalendars(ctx)
 				if err != nil {
 					return err
+				}
+				// Read stored ctags read-only; a dry run must not create or migrate
+				// the database. When no store exists yet, everything is "never synced".
+				st, exists, err := s.openStoreForRead()
+				if err != nil {
+					return err
+				}
+				if exists {
+					defer st.Close()
 				}
 				type dryRow struct {
 					ID        string `json:"id"`
@@ -54,23 +58,34 @@ func newSyncCmd(s *appState) *cobra.Command {
 					if calendarID != "" && c.ID != calendarID {
 						continue
 					}
-					stored, ok, err := st.CalendarState(c.ID)
-					if err != nil {
-						return err
-					}
 					would, reason := true, "ctag changed"
 					switch {
 					case full:
 						reason = "full rescan"
-					case !ok || stored == "":
+					case !exists:
 						reason = "never synced"
-					case stored == c.Ctag:
-						would, reason = false, "ctag unchanged"
+					default:
+						stored, ok, err := st.CalendarState(c.ID)
+						if err != nil {
+							return err
+						}
+						switch {
+						case !ok || stored == "":
+							reason = "never synced"
+						case stored == c.Ctag:
+							would, reason = false, "ctag unchanged"
+						}
 					}
 					rows = append(rows, dryRow{ID: c.ID, Name: c.DisplayName, WouldScan: would, Reason: reason})
 				}
 				return s.emit(map[string]any{"dry_run": true, "calendars": rows})
 			}
+
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
 
 			loc := displayLoc()
 			res, err := syncpkg.Run(ctx, client, st, syncpkg.Options{

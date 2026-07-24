@@ -40,9 +40,10 @@ jobs:
       - name: unit tests
         run: go test ./...
 
-      # No end-to-end step yet: there is no scripts/e2e.sh in this repo. When one
-      # lands (a mock CalDAV server, like the sibling CLIs' e2e harness), add a
-      # `./scripts/e2e.sh` step here.
+      - name: end-to-end contracts
+        run: |
+          make build
+          ./scripts/e2e.sh
 
   windows:
     name: Windows runtime and npm launcher

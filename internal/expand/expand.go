@@ -8,19 +8,12 @@ package expand
 
 import (
 	"encoding/json"
-	"strconv"
+	"fmt"
 	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/ical"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	"github.com/teambition/rrule-go"
-)
-
-// Metadata keys recording the window the derived instances currently cover, so
-// a query outside it can warn instead of silently returning nothing.
-const (
-	MetaCoveredStartMs = "expand_covered_start_ms"
-	MetaCoveredEndMs   = "expand_covered_end_ms"
 )
 
 // maxInstancesPerEvent caps expansion of a single unbounded rule so a stray
@@ -36,6 +29,11 @@ type Options struct {
 }
 
 // Rebuild recomputes every event_instances row and returns the count written.
+// It computes every row first and only then replaces the table atomically, so a
+// parse or write failure aborts with the previous instances intact rather than
+// leaving `event list` reading an empty or half-built table. A stored master
+// that fails to reparse is a genuine inconsistency (sync only stores parseable
+// resources) and aborts the rebuild rather than being silently skipped.
 func Rebuild(st *store.Store, opts Options) (int, error) {
 	masters, err := st.MastersForExpansion()
 	if err != nil {
@@ -49,11 +47,8 @@ func Rebuild(st *store.Store, opts Options) (int, error) {
 		}
 		byUID[m.UID] = append(byUID[m.UID], m)
 	}
-	if err := st.ClearInstances(); err != nil {
-		return 0, err
-	}
 
-	total := 0
+	var rows []store.InstanceRow
 	for _, uid := range order {
 		group := byUID[uid]
 		primary := pickPrimary(group, opts.CalendarPriority)
@@ -62,14 +57,14 @@ func Rebuild(st *store.Store, opts Options) (int, error) {
 
 		evs, err := ical.Parse(primary.RawICS, opts.Loc)
 		if err != nil {
-			continue
+			return 0, fmt.Errorf("expand: reparsing stored event %q: %w", uid, err)
 		}
 		master, overrides := split(evs, uid)
 		if master == nil {
-			continue
+			continue // only override components stored for this uid; nothing to expand
 		}
 		for _, o := range expandOccurrences(*master, overrides, opts) {
-			if err := st.InsertInstance(store.InstanceRow{
+			rows = append(rows, store.InstanceRow{
 				UID:               uid,
 				OccurrenceKey:     o.key,
 				PrimaryCalendarID: primary.CalendarID,
@@ -81,21 +76,15 @@ func Rebuild(st *store.Store, opts Options) (int, error) {
 				AllDay:            master.AllDay,
 				Status:            o.status,
 				LocalDate:         o.start.In(opts.Loc).Format("2006-01-02"),
-			}); err != nil {
-				return total, err
-			}
-			total++
+			})
 		}
 	}
-	// Record the covered window so queries beyond it can flag partial coverage
-	// rather than mistaking an empty result for "no events".
-	if err := st.SetSyncMeta(MetaCoveredStartMs, strconv.FormatInt(opts.Since.UTC().UnixMilli(), 10)); err != nil {
-		return total, err
+	// One transaction: clear, insert every row, and record the covered window so
+	// queries beyond it can flag partial coverage. Nothing is visible until commit.
+	if err := st.ReplaceInstances(rows, opts.Since.UTC().UnixMilli(), opts.Until.UTC().UnixMilli()); err != nil {
+		return 0, err
 	}
-	if err := st.SetSyncMeta(MetaCoveredEndMs, strconv.FormatInt(opts.Until.UTC().UnixMilli(), 10)); err != nil {
-		return total, err
-	}
-	return total, nil
+	return len(rows), nil
 }
 
 type occurrence struct {

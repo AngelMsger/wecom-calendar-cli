@@ -20,9 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--dry-run` to preview. Events that vanish from the server are **soft-deleted**
   (tombstoned), not removed, so history and attached metadata stay resolvable.
 - **`calendar list`** (`--refresh` re-lists from the server) and **`event list
-  --since --until`** (`--calendar`, `--limit`) — queries served from the store,
-  with recurring events expanded per occurrence and cross-calendar duplicates
-  de-duplicated.
+  --since --until`** (`--calendar`, `--limit`, keyset `--cursor`/`--all`,
+  `--status` to filter by status, `--include-meta` to attach annotations inline)
+  — queries served from the store, with recurring events expanded per occurrence
+  and cross-calendar duplicates de-duplicated.
+- **`event get <uid>`** (aliases `view`/`show`) — the full record for one event,
+  surfacing the fields the list view omits: `description`, `location`,
+  `organizer`, `rrule`, and `attendees` (each flagged `is_self` for the
+  configured account). `--occurrence <occurrence_key>` applies a recurring
+  event's per-date RECURRENCE-ID overrides; `--include-meta` attaches its
+  annotations. Closes the loop from `event list` (find a uid) to full detail.
+- **`whoami`** — the configured account (normalized email), so an agent can
+  subtract "me" from an event's attendees.
+- **`meta list --value <v>`** — reverse lookup: which events carry a given value
+  (e.g. every event linked to a task id).
 - **Agent-owned metadata layer** — `meta set` / `meta get` / `meta list` /
   `meta delete`, keyed by `(event uid, namespace, key)` with free-form (incl.
   JSON) values and an optional `--source`. Schema-agnostic: classification and
@@ -48,12 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `_notice.stale` on stderr when a read runs against an out-of-date store; the
   `WECOM_CALENDAR_CLI_SKILL=1` agent handshake; and an update notifier.
 
-### Known gaps
+### Notes
 
 - Recurrence expansion into `event_instances` with cross-calendar dedup
-  (`internal/expand`) is still being finalized against edge-case rules.
-- There is no e2e harness yet (a mock CalDAV server) — CI runs gofmt, vet, the
-  generated-docs check and unit tests; live behavior is verified manually
-  against the real server.
+  (`internal/expand`) is implemented (RRULE + EXDATE + RECURRENCE-ID overrides),
+  and rebuilds atomically.
+- Test coverage: unit tests across `ical`, `store`, `sync` (fake CalDAV client),
+  `expand`, `transport`, and `caldav`, plus `scripts/e2e.sh` offline-contract
+  checks (read-only, `--dry-run`, confirmation gate, cursor, exit codes) run in
+  CI on Linux. Live end-to-end behavior against the real WeCom server is
+  verified manually.
 
 [Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/commits/main

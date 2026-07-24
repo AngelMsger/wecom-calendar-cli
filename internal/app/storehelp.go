@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	expandpkg "github.com/angelmsger/wecom-calendar-cli/internal/expand"
 	"github.com/angelmsger/wecom-calendar-cli/internal/output"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
@@ -25,6 +24,22 @@ func (s *appState) openStore() (*store.Store, error) {
 			"could not open the local store")
 	}
 	return st, nil
+}
+
+// openStoreForRead opens the store read-only for previews (--dry-run), without
+// creating or migrating anything on disk. It returns exists=false when no
+// database is present yet, so callers preview against empty state instead of
+// materializing a file. Callers must Close the returned store when exists.
+func (s *appState) openStoreForRead() (st *store.Store, exists bool, err error) {
+	if _, statErr := os.Stat(s.dbPath()); statErr != nil {
+		return nil, false, nil // absent (or unreadable): treat as empty, write nothing
+	}
+	st, err = store.OpenReadOnly(s.dbPath())
+	if err != nil {
+		return nil, false, cerrors.Wrap(err, cerrors.CategoryInternal, "STORE_OPEN",
+			"could not open the local store read-only")
+	}
+	return st, true, nil
 }
 
 // staleNotice emits a stderr notice when the local store has never been synced
@@ -60,8 +75,8 @@ func (s *appState) staleNotice(st *store.Store) {
 // the expansion window are absent, so without this an out-of-range query would
 // look empty rather than under-covered. It never touches stdout.
 func (s *appState) coverageNotice(st *store.Store, since, until time.Time) {
-	startStr, ok1, err1 := st.GetSyncMeta(expandpkg.MetaCoveredStartMs)
-	endStr, ok2, err2 := st.GetSyncMeta(expandpkg.MetaCoveredEndMs)
+	startStr, ok1, err1 := st.GetSyncMeta(store.MetaCoveredStartMs)
+	endStr, ok2, err2 := st.GetSyncMeta(store.MetaCoveredEndMs)
 	if err1 != nil || err2 != nil || !ok1 || !ok2 {
 		return
 	}

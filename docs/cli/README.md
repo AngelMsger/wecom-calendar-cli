@@ -43,6 +43,7 @@ is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.
 | Command | Description |
 | --- | --- |
 | [`wecom-calendar-cli event`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-event) | Query calendar events |
+| [`wecom-calendar-cli event get`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-event-get) | Show one event in full, including description, location, organizer and attendees |
 | [`wecom-calendar-cli event list`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-event-list) | List events in a time window from the local store |
 
 ## expand
@@ -58,7 +59,7 @@ is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.
 | [`wecom-calendar-cli meta`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-meta) | Read and write custom, agent-maintained event metadata |
 | [`wecom-calendar-cli meta delete`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-meta-delete) | Delete a metadata entry |
 | [`wecom-calendar-cli meta get`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-meta-get) | Get metadata for one event |
-| [`wecom-calendar-cli meta list`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-meta-list) | List metadata across events, filtered by uid/namespace/key |
+| [`wecom-calendar-cli meta list`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-meta-list) | List metadata across events, filtered by uid/namespace/key/value |
 | [`wecom-calendar-cli meta set`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-meta-set) | Set a metadata value on an event |
 
 ## skill
@@ -83,4 +84,10 @@ is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.
 | Command | Description |
 | --- | --- |
 | [`wecom-calendar-cli version`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-version) | Print version information |
+
+## whoami
+
+| Command | Description |
+| --- | --- |
+| [`wecom-calendar-cli whoami`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-whoami) | Show the configured account (your own identity) |
 

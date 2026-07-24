@@ -53,6 +53,7 @@
     <div class="side-group">
       <div class="side-title">event</div>
       <a href="#wecom-calendar-cli-event">wecom-calendar-cli event</a>
+      <a href="#wecom-calendar-cli-event-get">wecom-calendar-cli event get</a>
       <a href="#wecom-calendar-cli-event-list">wecom-calendar-cli event list</a>
       </div>
     <div class="side-group">
@@ -83,6 +84,10 @@
     <div class="side-group">
       <div class="side-title">version</div>
       <a href="#wecom-calendar-cli-version">wecom-calendar-cli version</a>
+      </div>
+    <div class="side-group">
+      <div class="side-title">whoami</div>
+      <a href="#wecom-calendar-cli-whoami">wecom-calendar-cli whoami</a>
       </div>
     
   </aside>
@@ -286,6 +291,29 @@ a single command with the global --use-context flag instead.</p>
       
     </section>
     
+    <section class="cmd" id="wecom-calendar-cli-event-get">
+      <h2>wecom-calendar-cli event get</h2>
+      <p class="short">Show one event in full, including description, location, organizer and attendees</p>
+      <pre>wecom-calendar-cli event get &lt;uid&gt; [flags]</pre>
+      <p class="long">Return the full record for one event by uid — the fields `event list`
+omits: description, location, organizer, and attendees (each flagged
+`is_self` for the configured account, so you can tell who else is in the
+meeting). Find the uid with `event list`. For a specific occurrence of a
+recurring event, pass --occurrence with its `occurrence_key` to apply that
+date&#39;s overrides.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--include-meta</code></td><td><code>false</code></td><td>attach the event&#39;s custom metadata</td></tr>
+        <tr><td><code>--occurrence</code></td><td></td><td>apply a specific occurrence&#39;s overrides (its occurrence_key)</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli event get &lt;uid&gt;
+  wecom-calendar-cli event get &lt;uid&gt; --include-meta
+  wecom-calendar-cli event get &lt;uid&gt; --occurrence 1781168400000</pre>
+    </section>
+    
     <section class="cmd" id="wecom-calendar-cli-event-list">
       <h2>wecom-calendar-cli event list</h2>
       <p class="short">List events in a time window from the local store</p>
@@ -305,8 +333,10 @@ return every match in one page (fine here since the query is local).</p>
         <tr><td><code>--all</code></td><td><code>false</code></td><td>return every match in one page (no pagination)</td></tr>
         <tr><td><code>--calendar</code></td><td></td><td>restrict to one calendar id</td></tr>
         <tr><td><code>--cursor</code></td><td></td><td>continue from a previous page&#39;s `next` cursor</td></tr>
+        <tr><td><code>--include-meta</code></td><td><code>false</code></td><td>attach each event&#39;s custom metadata</td></tr>
         <tr><td><code>--limit</code></td><td><code>0</code></td><td>page size (0 = default page size unless --all)</td></tr>
         <tr><td><code>--since</code></td><td></td><td>start date YYYY-MM-DD (default 30 days ago)</td></tr>
+        <tr><td><code>--status</code></td><td></td><td>keep only these statuses, comma-separated (e.g. confirmed,tentative)</td></tr>
         <tr><td><code>--until</code></td><td></td><td>end date YYYY-MM-DD, exclusive (default 30 days ahead)</td></tr>
         </tbody>
       </table>
@@ -381,9 +411,11 @@ touches this layer, so re-syncing keeps your annotations.</p>
     
     <section class="cmd" id="wecom-calendar-cli-meta-list">
       <h2>wecom-calendar-cli meta list</h2>
-      <p class="short">List metadata across events, filtered by uid/namespace/key</p>
+      <p class="short">List metadata across events, filtered by uid/namespace/key/value</p>
       <pre>wecom-calendar-cli meta list [flags]</pre>
-      
+      <p class="long">List custom metadata entries. Filter by any of --uid/--namespace/--key,
+and by --value to reverse-look-up which events carry a given value —
+e.g. `--value G123` finds every event linked to that task.</p>
       <h3>Options</h3>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
@@ -391,10 +423,12 @@ touches this layer, so re-syncing keeps your annotations.</p>
         <tr><td><code>--key</code></td><td></td><td>filter by key</td></tr>
         <tr><td><code>--namespace</code></td><td></td><td>filter by namespace</td></tr>
         <tr><td><code>--uid</code></td><td></td><td>filter by event uid</td></tr>
+        <tr><td><code>--value</code></td><td></td><td>filter by value (substring of the stored JSON)</td></tr>
         </tbody>
       </table>
       <h3>Examples</h3><pre>  wecom-calendar-cli meta list --namespace task
-  wecom-calendar-cli meta list --key category</pre>
+  wecom-calendar-cli meta list --key category
+  wecom-calendar-cli meta list --value g-5980639611</pre>
     </section>
     
     <section class="cmd" id="wecom-calendar-cli-meta-set">
@@ -533,6 +567,15 @@ leaves the data unchanged. This never touches your event metadata.</p>
       <h2>wecom-calendar-cli version</h2>
       <p class="short">Print version information</p>
       <pre>wecom-calendar-cli version</pre>
+      
+      
+      
+    </section>
+    
+    <section class="cmd" id="wecom-calendar-cli-whoami">
+      <h2>wecom-calendar-cli whoami</h2>
+      <p class="short">Show the configured account (your own identity)</p>
+      <pre>wecom-calendar-cli whoami</pre>
       
       
       

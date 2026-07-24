@@ -1,7 +1,7 @@
 ---
 name: wecom-calendar
 version: 0.1.0
-description: "Sync a user's WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query events and calendars from it and maintain a free-form, agent-owned metadata layer (event classification, external task links). Use this skill when the user mentions a WeCom / 企业微信 calendar, schedule or 日程; asks to sync a calendar, refresh calendar data, list calendars, query or find events in a date range, or see calendar events; or wants to annotate, classify or tag an event, link an event to a task (e.g. a Feishu project item), or read those annotations. Queries read the local store, so run `sync` first and re-sync whenever a read prints a `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor a session read-only posture (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only, overridable with --allow-writes) and every write also accepts --dry-run to preview before applying."
+description: "Sync a user's WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query events and calendars from it and maintain a free-form, agent-owned metadata layer (event classification, external task links). Use this skill when the user mentions a WeCom / 企业微信 calendar, schedule or 日程; asks to sync a calendar, refresh calendar data, list calendars, query or find events in a date range, see calendar events, or read one event's full detail — description, location, organizer and attendees; or wants to annotate, classify or tag an event, link an event to a task (e.g. a Feishu project item), or read those annotations. Queries read the local store, so run `sync` first and re-sync whenever a read prints a `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor a session read-only posture (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only, overridable with --allow-writes) and every write also accepts --dry-run to preview before applying."
 metadata:
   requires:
     bins: ["wecom-calendar-cli"]
@@ -37,12 +37,17 @@ Do not reach for a non-existent "live query" flag: the freshness contract is
 - User wants to **see which calendars exist** → `calendar list`
   (`--refresh` to re-list from the server first).
 - User wants to **find events in a date range** → `event list --since
-  YYYY-MM-DD --until YYYY-MM-DD` (`--calendar`, `--limit`). See
-  [querying.md](references/querying.md).
+  YYYY-MM-DD --until YYYY-MM-DD` (`--calendar`, `--status`, `--include-meta`).
+  See [querying.md](references/querying.md).
+- User wants **one event's full detail — description, location, organizer,
+  attendees, or who they meet with** → find the uid with `event list`, then
+  `event get <uid>` (attendees are flagged `is_self`; `--include-meta` attaches
+  annotations). "Who am I" → `whoami`.
 - User wants to **annotate, classify, tag, or link an event to a task**
   (e.g. a Feishu project item) → `meta set <uid> <namespace> <key> <value>`.
 - User wants to **read annotations** on an event → `meta get <uid> [ns] [key]`;
-  across events → `meta list [--uid --namespace --key]`; to remove one →
+  across events → `meta list [--uid --namespace --key --value]` (`--value` is a
+  reverse lookup: which events link to a task); to remove one →
   `meta delete <uid> <ns> <key>`. See [metadata.md](references/metadata.md).
 - User asks **is it set up / why is a command failing** → `doctor`, then read
   the JSON error's `next_steps`. See
@@ -57,11 +62,15 @@ wecom-calendar-cli sync [--full] [--calendar id] [--dry-run]
 wecom-calendar-cli calendar list [--refresh]
                                        # calendars from the store (--refresh: server)
 wecom-calendar-cli event list --since YYYY-MM-DD --until YYYY-MM-DD \
-    [--calendar id] [--limit N]        # events from the store, in a window
+    [--calendar id] [--status s] [--include-meta] [--limit N] [--cursor c|--all]
+                                       # events from the store, in a window
+wecom-calendar-cli event get <uid> [--occurrence key] [--include-meta]
+                                       # one event in full: description, organizer, attendees(is_self)
+wecom-calendar-cli whoami              # the configured account (your identity)
 wecom-calendar-cli meta set <uid> <ns> <key> <value> [--source s] [--dry-run]
 wecom-calendar-cli meta get <uid> [ns] [key]        # read annotations
-wecom-calendar-cli meta list [--uid u --namespace ns --key k]
-wecom-calendar-cli meta delete <uid> <ns> <key>     # remove one annotation
+wecom-calendar-cli meta list [--uid u --namespace ns --key k --value v]
+wecom-calendar-cli meta delete <uid> <ns> <key> [--dry-run] [--yes]  # remove one
 wecom-calendar-cli config init|show|path|get-contexts|use-context|delete-context
 wecom-calendar-cli auth login|status|logout         # Basic (email + CalDAV pw)
 wecom-calendar-cli doctor                           # config / creds / connectivity

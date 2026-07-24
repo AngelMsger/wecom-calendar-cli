@@ -1,11 +1,16 @@
 package app
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/angelmsger/wecom-calendar-cli/internal/config"
+	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -20,14 +25,14 @@ func newEventCmd(s *appState) *cobra.Command {
 		Use:   "event",
 		Short: "Query calendar events",
 	}
-	cmd.AddCommand(newEventListCmd(s))
+	cmd.AddCommand(newEventListCmd(s), newEventGetCmd(s))
 	return cmd
 }
 
 func newEventListCmd(s *appState) *cobra.Command {
-	var since, until, calendarID, cursor string
+	var since, until, calendarID, cursor, statusCSV string
 	var limit int
-	var all bool
+	var all, includeMeta bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List events in a time window from the local store",
@@ -48,9 +53,14 @@ func newEventListCmd(s *appState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			offset := 0
+			sinceMs, untilMs := sinceT.UTC().UnixMilli(), untilT.UTC().UnixMilli()
+			// The cursor is bound to the query filters via a digest, so reusing a
+			// cursor from a different window/calendar is rejected rather than
+			// silently skipping data.
+			digest := filterDigest(sinceMs, untilMs, calendarID)
+			var after *store.InstanceCursor
 			if cursor != "" {
-				if offset, err = decodeCursor(cursor); err != nil {
+				if after, err = decodeCursor(cursor, digest); err != nil {
 					return err
 				}
 			}
@@ -74,46 +84,176 @@ func newEventListCmd(s *appState) *cobra.Command {
 
 			// Query the expanded instances so recurring events appear on every
 			// occurrence in the window (deduped across calendars).
-			rows, hasMore, err := st.QueryInstances(
-				sinceT.UTC().UnixMilli(), untilT.UTC().UnixMilli(), calendarID, offset, pageLimit)
+			rows, nextCur, err := st.QueryInstances(sinceMs, untilMs, calendarID, splitCSV(statusCSV), after, pageLimit)
 			if err != nil {
 				return err
 			}
-			next := ""
-			if hasMore {
-				next = encodeCursor(offset + len(rows))
+			if includeMeta {
+				if err := attachMeta(st, rows); err != nil {
+					return err
+				}
 			}
-			return s.emitList(rows, pageInfo{Next: next, HasMore: hasMore})
+			next := ""
+			if nextCur != nil {
+				next = encodeCursor(*nextCur, digest)
+			}
+			return s.emitList(rows, pageInfo{Next: next, HasMore: nextCur != nil})
 		},
 	}
 	f := cmd.Flags()
 	f.StringVar(&since, "since", "", "start date YYYY-MM-DD (default 30 days ago)")
 	f.StringVar(&until, "until", "", "end date YYYY-MM-DD, exclusive (default 30 days ahead)")
 	f.StringVar(&calendarID, "calendar", "", "restrict to one calendar id")
+	f.StringVar(&statusCSV, "status", "", "keep only these statuses, comma-separated (e.g. confirmed,tentative)")
+	f.BoolVar(&includeMeta, "include-meta", false, "attach each event's custom metadata")
 	f.IntVar(&limit, "limit", 0, "page size (0 = default page size unless --all)")
 	f.StringVar(&cursor, "cursor", "", "continue from a previous page's `next` cursor")
 	f.BoolVar(&all, "all", false, "return every match in one page (no pagination)")
 	return cmd
 }
 
-// encodeCursor/decodeCursor make an opaque, self-describing pagination cursor
-// over the stable (start, uid, occurrence) ordering. Offset-based paging is safe
-// here because the query is a local, read-only snapshot between calls.
-func encodeCursor(offset int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte("off:" + strconv.Itoa(offset)))
-}
-
-func decodeCursor(s string) (int, error) {
-	if raw, err := base64.RawURLEncoding.DecodeString(s); err == nil {
-		if v, ok := strings.CutPrefix(string(raw), "off:"); ok {
-			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-				return n, nil
-			}
+// splitCSV splits a comma-separated flag into trimmed, non-empty tokens.
+func splitCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
 		}
 	}
-	return 0, cerrors.Newf(cerrors.CategoryUsage, "BAD_CURSOR",
-		"invalid --cursor value %q", s).
-		WithHint("Pass the `next` value from a previous page verbatim, or omit --cursor to start over.")
+	return out
+}
+
+// attachMeta fills each instance's Metadata from a single batched lookup.
+func attachMeta(st *store.Store, rows []store.InstanceOut) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	uids := make([]string, 0, len(rows))
+	seen := map[string]bool{}
+	for _, r := range rows {
+		if !seen[r.UID] {
+			seen[r.UID] = true
+			uids = append(uids, r.UID)
+		}
+	}
+	byUID, err := st.MetaForUIDs(uids)
+	if err != nil {
+		return err
+	}
+	for i := range rows {
+		rows[i].Metadata = byUID[rows[i].UID]
+	}
+	return nil
+}
+
+func newEventGetCmd(s *appState) *cobra.Command {
+	var includeMeta bool
+	var occurrence string
+	cmd := &cobra.Command{
+		Use:     "get <uid>",
+		Aliases: []string{"view", "show"},
+		Short:   "Show one event in full, including description, location, organizer and attendees",
+		Long: "Return the full record for one event by uid — the fields `event list`\n" +
+			"omits: description, location, organizer, and attendees (each flagged\n" +
+			"`is_self` for the configured account, so you can tell who else is in the\n" +
+			"meeting). Find the uid with `event list`. For a specific occurrence of a\n" +
+			"recurring event, pass --occurrence with its `occurrence_key` to apply that\n" +
+			"date's overrides.",
+		Example: "  wecom-calendar-cli event get <uid>\n" +
+			"  wecom-calendar-cli event get <uid> --include-meta\n" +
+			"  wecom-calendar-cli event get <uid> --occurrence 1781168400000",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			uid := args[0]
+			st, err := s.openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			s.staleNotice(st)
+
+			detail, err := st.EventDetail(uid, occurrence)
+			if err != nil {
+				return err
+			}
+			if detail == nil {
+				return cerrors.Newf(cerrors.CategoryNotFound, "EVENT_NOT_FOUND",
+					"no live event with uid %q in the local store", uid).
+					WithHint("List events with `wecom-calendar-cli event list --since <date> --until <date>` to find a uid, or run `sync` if the store is empty.")
+			}
+			markSelf(detail.Attendees, s.cfg().Auth.Username)
+			if includeMeta {
+				rows, err := st.MetaList(uid, "", "", "")
+				if err != nil {
+					return err
+				}
+				detail.Metadata = rows
+			}
+			return s.emit(detail)
+		},
+	}
+	f := cmd.Flags()
+	f.BoolVar(&includeMeta, "include-meta", false, "attach the event's custom metadata")
+	f.StringVar(&occurrence, "occurrence", "", "apply a specific occurrence's overrides (its occurrence_key)")
+	return cmd
+}
+
+// markSelf flags the attendee that matches the configured account, so an agent
+// can subtract "me" when reasoning about who else attended.
+func markSelf(attendees []store.AttendeeOut, selfUsername string) {
+	self := config.NormalizeUsername(selfUsername)
+	if self == "" {
+		return
+	}
+	for i := range attendees {
+		if config.NormalizeUsername(attendees[i].Email) == self {
+			attendees[i].IsSelf = true
+		}
+	}
+}
+
+// filterDigest binds a cursor to the query that produced it (window + calendar),
+// so a cursor cannot be replayed against a different filter set — which, with a
+// raw offset, would silently skip or duplicate rows.
+func filterDigest(sinceMs, untilMs int64, calID string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d|%d|%s", sinceMs, untilMs, calID)))
+	return hex.EncodeToString(sum[:8])
+}
+
+// encodeCursor/decodeCursor carry a keyset position (start_at_ms, uid,
+// occurrence_key) plus the filter digest, opaque and URL-safe. Keyset paging is
+// stable across inserts/deletes between calls, unlike an offset.
+func encodeCursor(c store.InstanceCursor, digest string) string {
+	payload := strings.Join([]string{strconv.FormatInt(c.StartMs, 10), c.UID, c.Key, digest}, "\x1f")
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeCursor(s, wantDigest string) (*store.InstanceCursor, error) {
+	bad := func() error {
+		return cerrors.Newf(cerrors.CategoryUsage, "BAD_CURSOR", "invalid --cursor value %q", s).
+			WithHint("Pass the `next` value from a previous page verbatim, or omit --cursor to start over.")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, bad()
+	}
+	parts := strings.Split(string(raw), "\x1f")
+	if len(parts) != 4 {
+		return nil, bad()
+	}
+	ms, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return nil, bad()
+	}
+	if parts[3] != wantDigest {
+		return nil, cerrors.New(cerrors.CategoryUsage, "CURSOR_MISMATCH",
+			"this --cursor was issued for a different query window or calendar").
+			WithHint("Restart paging without --cursor, keeping --since/--until/--calendar identical across pages.")
+	}
+	return &store.InstanceCursor{StartMs: ms, UID: parts[1], Key: parts[2]}, nil
 }
 
 // parseWindow resolves the --since/--until flags to a time range, applying

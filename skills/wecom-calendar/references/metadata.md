@@ -35,6 +35,7 @@ wecom-calendar-cli meta get <uid> task feishu_project   # one value
 wecom-calendar-cli meta list --namespace task     # every task-namespace row
 wecom-calendar-cli meta list --uid <uid>          # everything on one event
 wecom-calendar-cli meta list --key category       # one key across all events
+wecom-calendar-cli meta list --value g-5980639611 # reverse: events linked to a task
 
 # Remove one annotation
 wecom-calendar-cli meta delete <uid> <namespace> <key>
@@ -42,7 +43,12 @@ wecom-calendar-cli meta delete <uid> <namespace> <key>
 
 `meta set` overwrites the value at `(uid, namespace, key)` if it already
 exists; it is not append. `meta list` returns the `{items, next, has_more}`
-envelope like the other list commands.
+envelope like the other list commands. `--value <v>` is a **reverse lookup** —
+it matches entries whose stored JSON value contains `<v>`, so a bare task id like
+`g-5980639611` finds every event linked to that task (whether stored as a scalar
+`"g-5980639611"` or inside a larger object). Combine it with `--key`/`--namespace`
+to narrow the match. To pull an event's annotations *together with* its own
+fields, use `event get <uid> --include-meta` (or `event list --include-meta`).
 
 ## Schema-agnostic — pick your own namespaces
 

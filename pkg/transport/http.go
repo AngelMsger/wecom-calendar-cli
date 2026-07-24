@@ -2,8 +2,10 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
@@ -48,7 +50,7 @@ func New(opt Options) *Client {
 		if timeout == 0 {
 			timeout = constants.DefaultTimeout
 		}
-		c.doer = &http.Client{Timeout: timeout}
+		c.doer = &http.Client{Timeout: timeout, CheckRedirect: sameOriginRedirect}
 	}
 	if opt.Verbose != nil {
 		c.doer = &loggingDoer{inner: c.doer, w: opt.Verbose}
@@ -57,6 +59,25 @@ func New(opt Options) *Client {
 		c.baseDelay = 500 * time.Millisecond
 	}
 	return c
+}
+
+// sameOriginRedirect refuses any redirect that leaves the first hop's origin.
+// The default http.Client would follow redirects and, because Go's own
+// same-domain check ignores scheme and port (and permits subdomains), could
+// carry the Authorization header to an HTTP-downgraded, different-port, or
+// subdomain target. Requiring an exact scheme+host(+port) match on every hop
+// keeps Basic credentials on the configured server. req.URL.Host includes the
+// port, so a port change is caught too.
+func sameOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+	origin := via[0].URL
+	if req.URL.Scheme != origin.Scheme || !strings.EqualFold(req.URL.Host, origin.Host) {
+		return fmt.Errorf("refusing cross-origin redirect from %s://%s to %s://%s",
+			origin.Scheme, origin.Host, req.URL.Scheme, req.URL.Host)
+	}
+	return nil
 }
 
 // Do sends req, applying decorators and retrying transient failures. The
