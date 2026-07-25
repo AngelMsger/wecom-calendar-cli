@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Incremental `sync` is incremental again.** A single resource the server
+  permanently 404s (or that won't parse) used to withhold its whole calendar's
+  change-tag, so busy calendars re-scanned and re-fetched *everything* every
+  time (observed: a 763s "incremental" sync re-fetching 3025 events). Such
+  resources are now recorded as known-bad by their `getetag` — the calendar's
+  change-tag commits, so an unchanged calendar is skipped entirely on the next
+  sync, and a re-scan no longer re-attempts them (`--full` still does).
+  Additionally, the resource skip now compares the CalDAV `getetag` (what the
+  next listing returns) instead of the GET `ETag` header (which differs on this
+  server and defeated the skip). Note: the **first** sync after upgrading still
+  does a one-time full re-fetch (to store getetags and record broken
+  resources); subsequent syncs are fast.
+
 ### Added
 
 - **Initial feature set: a local, queryable, annotatable mirror of a user's

@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS calendar_resources (
 CREATE INDEX IF NOT EXISTS idx_cr_live ON calendar_resources(calendar_id, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_cr_etag ON calendar_resources(etag);
 
+-- Resources the server lists but cannot serve (GET 404) or whose body will not
+-- parse. Recording them by their getetag lets an incremental sync recognize an
+-- unchanged bad resource and skip it, so a single permanently-broken resource
+-- no longer forces its whole calendar to re-scan forever. Kept separate from
+-- calendar_resources so the not-seen soft-delete sweep is unaffected.
+CREATE TABLE IF NOT EXISTS calendar_resource_failures (
+    calendar_id   TEXT NOT NULL,   -- 所属日历
+    href          TEXT NOT NULL,   -- .ics 资源路径
+    etag          TEXT,            -- 失败时见到的 getetag (变了才重试)
+    reason        TEXT NOT NULL,   -- 'unfetchable' | 'unparseable'
+    failed_at     TEXT,
+    failed_at_ms  INTEGER,
+    PRIMARY KEY (calendar_id, href)
+);
+CREATE INDEX IF NOT EXISTS idx_crf_cal ON calendar_resource_failures(calendar_id);
+
 CREATE TABLE IF NOT EXISTS calendar_events (
     calendar_id       TEXT NOT NULL,   -- 所属日历
     uid               TEXT NOT NULL,   -- iCalendar UID

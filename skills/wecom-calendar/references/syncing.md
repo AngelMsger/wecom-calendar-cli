@@ -40,12 +40,37 @@ Each calendar carries a server-issued **change-tag** (a CalDAV `getctag`).
 The sync report tells you what happened per calendar: calendars scanned,
 events added / updated / soft-deleted, and calendars skipped as unchanged.
 
+Some WeCom calendars list resources the server then cannot serve (a `GET` 404s)
+or whose body will not parse. Such resources are recorded as **known-bad** by
+their change-tag and skipped on later syncs, so one broken resource no longer
+forces its whole calendar to re-scan forever. `--full` re-attempts them.
+
+> **First sync after upgrading is slow, then fast.** The incremental fix needs
+> to store fresh change-tags and record the broken resources, so the *first*
+> `sync` after updating re-fetches everything one more time. Every sync after
+> that skips unchanged calendars and only fetches what actually moved.
+
+## Cadence — how often to sync
+
+An unchanged sync is cheap (a change-tag check per calendar, no fetches), so
+running it often is fine. Since queries read the local store and never reach the
+server, keep the store warm by scheduling `sync` yourself — e.g. a `cron` or
+`launchd` job every 10–15 minutes:
+
+```cron
+*/15 * * * * /usr/local/bin/wecom-calendar-cli sync --progress none >/dev/null 2>&1
+```
+
+The tool does not sync on its own (reads stay offline and instant); a read only
+prints a `_notice.stale` hint when the store is behind.
+
 ## `--full` — reconcile from scratch
 
-`--full` ignores the change-tags and re-lists every calendar's events,
-re-fetching bodies as needed. Use it when you suspect the store drifted (a
-partial sync was interrupted, or the server's tag semantics missed a change).
-It is heavier but produces the same end state — `sync` is idempotent.
+`--full` ignores the change-tags **and** the known-bad records, re-listing and
+re-fetching every calendar's events. Use it when you suspect the store drifted
+(a partial sync was interrupted, the server's tag semantics missed a change, or
+a previously-unparseable resource should be retried after a fix). It is heavier
+but produces the same end state — `sync` is idempotent.
 
 ## Idempotency
 

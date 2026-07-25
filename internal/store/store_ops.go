@@ -228,6 +228,64 @@ func (s *Store) ResourceEtags(calID string) (map[string]string, error) {
 	return out, rows.Err()
 }
 
+// ResourceFailures returns href->getetag for a calendar's recorded fetch/parse
+// failures, so the partition can skip an unchanged bad resource.
+func (s *Store) ResourceFailures(calID string) (map[string]string, error) {
+	rows, err := s.db.Query(
+		`SELECT href, COALESCE(etag,'') FROM calendar_resource_failures WHERE calendar_id=?`, calID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var h, e string
+		if err := rows.Scan(&h, &e); err != nil {
+			return nil, err
+		}
+		out[h] = e
+	}
+	return out, rows.Err()
+}
+
+// RecordResourceFailure remembers a resource the server lists but cannot serve
+// (404) or whose body will not parse, keyed by the getetag seen, so a later
+// sync recognizes it as unchanged-and-bad and skips it instead of re-fetching.
+func (s *Store) RecordResourceFailure(calID, href, etag, reason string, now time.Time) error {
+	iso, ms := isoMs(now)
+	_, err := s.db.Exec(
+		`INSERT INTO calendar_resource_failures(calendar_id, href, etag, reason, failed_at, failed_at_ms)
+		 VALUES(?,?,?,?,?,?)
+		 ON CONFLICT(calendar_id, href) DO UPDATE SET
+		   etag=excluded.etag, reason=excluded.reason,
+		   failed_at=excluded.failed_at, failed_at_ms=excluded.failed_at_ms`,
+		calID, href, etag, reason, iso, ms)
+	return err
+}
+
+// ClearResourceFailure drops any failure record for a resource that now fetched
+// and parsed cleanly.
+func (s *Store) ClearResourceFailure(calID, href string) error {
+	_, err := s.db.Exec(
+		`DELETE FROM calendar_resource_failures WHERE calendar_id=? AND href=?`, calID, href)
+	return err
+}
+
+// PruneResourceFailuresNotIn drops failure records for resources the server no
+// longer lists, so the table does not grow unbounded.
+func (s *Store) PruneResourceFailuresNotIn(calID string, keepHrefs []string) error {
+	q := `DELETE FROM calendar_resource_failures WHERE calendar_id=?`
+	args := []any{calID}
+	if len(keepHrefs) > 0 {
+		q += " AND href NOT IN (" + placeholders(len(keepHrefs)) + ")"
+		for _, h := range keepHrefs {
+			args = append(args, h)
+		}
+	}
+	_, err := s.db.Exec(q, args...)
+	return err
+}
+
 func (s *Store) TouchResource(calID, href string, now time.Time) error {
 	iso, ms := isoMs(now)
 	_, err := s.db.Exec(

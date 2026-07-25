@@ -49,7 +49,13 @@ Empirically verified; generic CalDAV libraries fail here:
 - TZIDs are non-IANA (e.g. `TZ08`) but every event embeds a VTIMEZONE defining
   them — `internal/ical` resolves the embedded offset itself because go-ical's
   `DateTime` hard-fails on such TZIDs.
-- Incremental sync keys off the per-calendar `getctag`.
+- Incremental sync keys off the per-calendar `getctag`; within a scanned
+  calendar it skips resources whose `getetag` (the one from `calendar-query`,
+  **not** the GET `ETag` header — they differ here) is unchanged.
+- The server lists resources it then 404s, and some bodies won't parse. These
+  are recorded in `calendar_resource_failures` by `getetag` and skipped, so a
+  permanently-broken resource does **not** withhold its calendar's `getctag` and
+  force a perpetual full re-scan. `--full` re-attempts them.
 
 ## Commands
 

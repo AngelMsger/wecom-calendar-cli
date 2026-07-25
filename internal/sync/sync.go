@@ -168,15 +168,32 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 	if err != nil {
 		return err
 	}
+	failed, err := st.ResourceFailures(cal.ID)
+	if err != nil {
+		return err
+	}
 
-	// Partition: unchanged resources are just touched; the rest are fetched.
+	// Partition: an unchanged good resource is just touched; an unchanged
+	// known-bad resource (same getetag we already failed on) is skipped without
+	// re-fetching; everything else is fetched. --full reconciles everything,
+	// re-fetching good and retrying bad. Comparison is against the REPORT getetag
+	// (ref.Etag), which is also what we store, so it can actually match.
+	allHrefs := make([]string, 0, len(refs))
 	var toFetch []caldav.EventRef
 	for _, ref := range refs {
+		allHrefs = append(allHrefs, ref.Href)
+		if opts.Full {
+			toFetch = append(toFetch, ref)
+			continue
+		}
 		if e, ok := stored[ref.Href]; ok && ref.Etag != "" && e == ref.Etag {
 			if err := st.TouchResource(cal.ID, ref.Href, now); err != nil {
 				return err
 			}
 			continue
+		}
+		if fe, ok := failed[ref.Href]; ok && ref.Etag != "" && fe == ref.Etag {
+			continue // known-bad and unchanged: skip, do not re-fetch (--full retries it)
 		}
 		toFetch = append(toFetch, ref)
 	}
@@ -203,9 +220,12 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			raw, err := client.GetEvent(ctx, ref.Href)
-			etag := raw.Etag
+			// Store the REPORT getetag (what the next sync compares against), not
+			// the GET response ETag — the two differ on this server, which made
+			// every resource look "changed" and defeated the incremental skip.
+			etag := ref.Etag
 			if etag == "" {
-				etag = ref.Etag
+				etag = raw.Etag
 			}
 			results[i] = fetched{ref: ref, ics: raw.ICS, etag: etag, err: err}
 			atomic.AddInt64(&fetchedCount, 1)
@@ -214,33 +234,33 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 	wg.Wait()
 	stopHeartbeat()
 
-	// Serial write phase (SQLite is single-writer). clean tracks whether every
-	// listed resource was fetched AND parsed; if not, we withhold the ctag below
-	// so the next sync re-lists and retries instead of skipping the calendar.
+	// Serial write phase (SQLite is single-writer). clean tracks whether the ctag
+	// may be committed. A resource that 404s or won't parse is recorded (by its
+	// getetag) as known-bad rather than blocking the ctag forever — the earlier
+	// "any failure withholds the ctag" rule meant a single permanently-broken
+	// resource forced its whole calendar to re-scan on every sync. We only
+	// withhold the ctag when a failure cannot be recorded recognizably (no
+	// getetag), so it is retried next time.
 	clean := true
 	for _, r := range results {
 		if r.err != nil {
-			// A resource the server listed but cannot serve (a 404 from its
-			// inconsistent backend) must not abort the calendar; keep the row and
-			// force a re-list next time. Once the server stops listing it, the
-			// not-seen sweep below tombstones it.
 			if cerrors.AsCLIError(r.err).Category == cerrors.CategoryNotFound {
 				_ = st.AddWarning(runID, "resource_unfetchable", r.ref.Href, now)
-				_ = st.TouchResource(cal.ID, r.ref.Href, now)
-				clean = false
+				if !recordFailure(st, cal.ID, r.ref, "unfetchable", now) {
+					clean = false
+				}
 				continue
 			}
 			return r.err
 		}
-		// Parse BEFORE recording the resource's etag/content. If parsing fails we
-		// deliberately do not advance the etag (so a --full sync re-fetches it)
-		// and set clean=false (so an incremental sync re-lists the calendar);
-		// otherwise the event would be dropped now and then permanently skipped.
+		// Parse BEFORE recording the resource's etag/content, so an unparseable
+		// body never advances the etag and is remembered as known-bad instead.
 		evs, err := ical.Parse(r.ics, opts.Loc)
 		if err != nil {
 			_ = st.AddWarning(runID, "resource_unparseable", r.ref.Href, now)
-			_ = st.TouchResource(cal.ID, r.ref.Href, now)
-			clean = false
+			if !recordFailure(st, cal.ID, r.ref, "unparseable", now) {
+				clean = false
+			}
 			continue
 		}
 		stats.ResourcesFetched++
@@ -248,6 +268,7 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		if err := st.UpsertResourceContent(cal.ID, r.ref.Href, r.etag, hex.EncodeToString(sum[:]), len(r.ics), now, runID); err != nil {
 			return err
 		}
+		_ = st.ClearResourceFailure(cal.ID, r.ref.Href) // fetched+parsed cleanly: no longer bad
 		keep := make([][2]string, 0, len(evs))
 		for _, ev := range evs {
 			keep = append(keep, [2]string{ev.UID, ev.RecurrenceIDKey})
@@ -274,6 +295,10 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		}
 		stats.EventsSoftDeleted += n
 	}
+	// Drop failure records for resources the server no longer lists.
+	if err := st.PruneResourceFailuresNotIn(cal.ID, allHrefs); err != nil {
+		return err
+	}
 
 	// Commit the ctag only after every resource for this calendar landed AND
 	// parsed, so an interruption or a bad resource re-scans next time rather than
@@ -282,6 +307,22 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		return st.SetCalendarState(cal.ID, cal.Ctag, now)
 	}
 	return nil
+}
+
+// recordFailure remembers a resource that could not be fetched or parsed, keyed
+// by the getetag seen, so a later sync recognizes it as unchanged-and-bad and
+// skips it. It also touches any existing resource row so the not-seen sweep does
+// not tombstone a resource the server still lists. It returns whether the ctag
+// may still be committed: true when the failure was recorded recognizably (a
+// getetag is present), false when it was not (so the calendar re-lists next time
+// to retry). The server provides getetags, so this is true in practice.
+func recordFailure(st *store.Store, calID string, ref caldav.EventRef, reason string, now time.Time) bool {
+	_ = st.TouchResource(calID, ref.Href, now)
+	if ref.Etag == "" {
+		return false
+	}
+	_ = st.RecordResourceFailure(calID, ref.Href, ref.Etag, reason, now)
+	return true
 }
 
 // startFetchHeartbeat runs a timer that emits a fetching progress event every
