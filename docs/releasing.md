@@ -6,7 +6,16 @@ release assets, so a release is the single source of truth.
 
 ## Publishing setup
 
-- The repository is public at `github.com/AngelMsger/wecom-calendar-cli`.
+- The repository is public at `github.com/AngelMsger/wecom-calendar-cli`, like
+  every other CLI in the family. **It must stay public**: GitHub Pages on a
+  private repository requires a paid plan, and on the current plan the API
+  rejects enabling it with `422 Your current plan does not support GitHub Pages
+  for this repository` while `.github/workflows/pages.yml` fails at
+  `actions/configure-pages` with a 404. Flipping the repository back to private
+  therefore silently breaks the docs site at
+  <https://angelmsger.github.io/wecom-calendar-cli/>, which the README badges,
+  `build/npm/package.json`'s `homepage` and the landing page's own canonical URL
+  all point at.
 - The npm account owns the `@angelmsger` scope; the package is published as
   `@angelmsger/wecom-calendar-cli`.
 - **npm publishing uses trusted publishing (OIDC)** — no long-lived token, no
