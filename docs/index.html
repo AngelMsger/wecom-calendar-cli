@@ -20,20 +20,33 @@
 <style>
 /* wecom-calendar-cli — landing page styles (family "terminal-craft" aesthetic:
    IBM Plex Mono display voice, IBM Plex Sans body, one accent, terminal-window
-   framing for code). Inlined so the page is self-contained. */
+   framing for code). Inlined so the page is self-contained.
+
+   Palette: WeCom (Enterprise WeChat) is a BLUE brand — the green #07c160 this
+   page used to carry is WeChat's consumer brand, not WeCom's. The accents below
+   are sampled from docs/image.png so the page and the poster read as one piece:
+   #1464f0 is the dominant blue (the poster's "Agent Guide" pill is #0859f9) and
+   #6a5cf5 is the violet its gradient resolves to. The neutrals are pulled toward
+   indigo for the same reason — a neutral near-black made the blue look bolted on.
+
+   Two accent tokens on purpose: --accent is the saturated brand blue, used for
+   fills and bars where it sits under white text; --accent-text is a lightened
+   tint for text and links, because #1464f0 on this background is only ~3.8:1
+   (below the 4.5:1 floor) while the tint clears 7:1. */
 :root {
-  --bg:          #0b0d12;
-  --bg-soft:     #10131b;
-  --panel:       #141823;
-  --card:        #151926;
-  --border:      #252c3e;
-  --border-soft: #1d2333;
-  --text:        #e9ebf2;
-  --muted:       #8b93a7;
-  --faint:       #586073;
-  --accent:      #07c160;
-  --accent-2:    #4de3a0;
-  --accent-soft: rgba(7, 193, 96, 0.13);
+  --bg:          #070b16;
+  --bg-soft:     #0c1223;
+  --panel:       #101830;
+  --card:        #121a34;
+  --border:      #243056;
+  --border-soft: #1a2340;
+  --text:        #e9edfa;
+  --muted:       #8d99bf;
+  --faint:       #58648c;
+  --accent:      #1464f0;
+  --accent-2:    #6a5cf5;
+  --accent-text: #5f9bff;
+  --accent-soft: rgba(20, 100, 240, 0.15);
   --radius:      12px;
   --radius-lg:   18px;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -53,8 +66,8 @@ body {
 body::before {
   content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background:
-    radial-gradient(58% 44% at 50% -6%, rgba(7, 193, 96, 0.20), transparent 72%),
-    radial-gradient(40% 36% at 100% 2%, rgba(77, 227, 160, 0.07), transparent 70%);
+    radial-gradient(58% 44% at 50% -6%, rgba(20, 100, 240, 0.24), transparent 72%),
+    radial-gradient(40% 36% at 100% 2%, rgba(106, 92, 245, 0.12), transparent 70%);
 }
 body::after {
   content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
@@ -66,19 +79,19 @@ body::after {
           mask-image: radial-gradient(64% 50% at 50% 0%, #000 0%, transparent 78%);
   opacity: 0.5;
 }
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--accent-text); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code, pre, kbd { font-family: var(--mono); }
 .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
 h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em; }
 .eyebrow {
   font-family: var(--mono); font-size: 0.74rem; font-weight: 500;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-text);
 }
 .lead { color: var(--muted); font-size: 1.04rem; max-width: 60ch; }
 .nav {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(11, 13, 18, 0.78);
+  background: rgba(7, 11, 22, 0.78);
   backdrop-filter: blur(12px) saturate(140%);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -91,11 +104,11 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
   display: flex; align-items: center; gap: 7px;
 }
 .brand:hover { text-decoration: none; }
-.brand::before { content: "›"; color: var(--accent); font-weight: 700; }
+.brand::before { content: "›"; color: var(--accent-text); font-weight: 700; }
 .nav-links { margin-left: auto; display: flex; gap: 22px; align-items: center; }
 .nav-links a { color: var(--muted); font-size: 0.88rem; font-family: var(--mono); }
 .nav-links a:hover { color: var(--text); text-decoration: none; }
-.nav-links a.is-cli { color: var(--accent); }
+.nav-links a.is-cli { color: var(--accent-text); }
 .nav-links a.is-cli:hover { color: var(--accent-2); }
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
@@ -105,10 +118,12 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 }
 .btn:hover { text-decoration: none; transform: translateY(-2px); }
 .btn-primary {
-  background: var(--accent); color: #04180d; border-color: var(--accent);
+  background: var(--accent); color: #ffffff; border-color: var(--accent);
   font-weight: 600;
 }
-.btn-primary:hover { background: #10d873; }
+/* Hover deepens rather than lightens: white on a lighter blue drops to 3.6:1,
+   below the 4.5:1 floor, while this holds 6.6:1. */
+.btn-primary:hover { background: #0d52d6; border-color: #0d52d6; }
 .btn-ghost { background: var(--panel); color: var(--text); }
 .btn-ghost:hover { border-color: var(--accent); }
 .section { padding: 92px 0; border-top: 1px solid var(--border-soft); }
@@ -133,10 +148,11 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
   margin: 56px auto 0; max-width: 900px;
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   overflow: hidden; background: var(--bg-soft);
-  box-shadow: 0 40px 90px -50px rgba(7, 193, 96, 0.5),
-              0 18px 50px -30px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 40px 90px -50px rgba(20, 100, 240, 0.55),
+              0 24px 70px -46px rgba(106, 92, 245, 0.45),
+              0 18px 50px -30px rgba(0, 0, 0, 0.85);
 }
-.shot img { width: 100%; display: block; }
+.shot img { width: 100%; height: auto; display: block; }
 .term { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft); overflow: hidden; }
 .term-bar {
   display: flex; align-items: center; gap: 7px;
@@ -151,11 +167,11 @@ pre {
 }
 .term pre { border: 0; border-radius: 0; }
 pre .c { color: var(--faint); }
-pre .p { color: var(--accent); }
+pre .p { color: var(--accent-text); }
 p code, li code, td code {
   font-size: 0.86em; background: var(--accent-soft);
   border: 1px solid var(--border-soft); border-radius: 5px; padding: 1px 6px;
-  color: #a7e9c6;
+  color: #a8c8ff;
 }
 .grid { display: grid; gap: 16px; }
 .grid-3 { grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); }
@@ -173,10 +189,10 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
   background: var(--accent-soft); border: 1px solid var(--border-soft);
   display: grid; place-items: center; margin-bottom: 14px;
 }
-.feat .feat-ico svg { width: 20px; height: 20px; stroke: var(--accent); }
+.feat .feat-ico svg { width: 20px; height: 20px; stroke: var(--accent-text); }
 .cmd-group { display: block; }
 .cmd-group .cg-name { font-family: var(--mono); font-weight: 600; color: var(--text); font-size: 0.98rem; }
-.cmd-group .cg-name::before { content: "$ "; color: var(--accent); }
+.cmd-group .cg-name::before { content: "$ "; color: var(--accent-text); }
 .cmd-group p { margin-top: 5px; }
 .footer { border-top: 1px solid var(--border-soft); padding: 34px 0; color: var(--muted); font-size: 0.88rem; }
 .footer .wrap { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; }

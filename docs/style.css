@@ -1,19 +1,21 @@
 /* wecom-calendar-cli — CLI reference page styles. Same "terminal-craft" design
-   tokens as the landing page (docs/index.html), extracted here because the
-   generated cli/index.html links this stylesheet rather than inlining it. */
+   tokens as the landing page (docs/index.html), including its WeCom-blue
+   palette, extracted here because the generated cli/index.html links this
+   stylesheet rather than inlining it. Keep the two token blocks in sync. */
 :root {
-  --bg:          #0b0d12;
-  --bg-soft:     #10131b;
-  --panel:       #141823;
-  --card:        #151926;
-  --border:      #252c3e;
-  --border-soft: #1d2333;
-  --text:        #e9ebf2;
-  --muted:       #8b93a7;
-  --faint:       #586073;
-  --accent:      #07c160;
-  --accent-2:    #4de3a0;
-  --accent-soft: rgba(7, 193, 96, 0.13);
+  --bg:          #070b16;
+  --bg-soft:     #0c1223;
+  --panel:       #101830;
+  --card:        #121a34;
+  --border:      #243056;
+  --border-soft: #1a2340;
+  --text:        #e9edfa;
+  --muted:       #8d99bf;
+  --faint:       #58648c;
+  --accent:      #1464f0;
+  --accent-2:    #6a5cf5;
+  --accent-text: #5f9bff;
+  --accent-soft: rgba(20, 100, 240, 0.15);
   --radius:      12px;
   --radius-lg:   18px;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -29,21 +31,21 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--accent-text); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code, pre, kbd { font-family: var(--mono); }
 .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
 h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em; }
 .eyebrow {
   font-family: var(--mono); font-size: 0.74rem; font-weight: 500;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-text);
 }
 .lead { color: var(--muted); font-size: 1.02rem; max-width: 68ch; margin: 6px 0; }
 
 /* top navigation */
 .nav {
   position: sticky; top: 0; z-index: 10;
-  background: rgba(11, 13, 18, 0.82); backdrop-filter: blur(10px);
+  background: rgba(7, 11, 22, 0.82); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-soft);
 }
 .nav-inner {
@@ -53,7 +55,7 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 .brand { font-family: var(--mono); font-weight: 600; color: var(--text); }
 .nav-links { display: flex; gap: 18px; align-items: center; }
 .nav-links a { color: var(--muted); font-size: 0.92rem; }
-.nav-links a:hover, .nav-links a.is-cli { color: var(--accent); text-decoration: none; }
+.nav-links a:hover, .nav-links a.is-cli { color: var(--accent-text); text-decoration: none; }
 
 /* two-column layout: sticky sidebar + content */
 .layout {
@@ -67,7 +69,7 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
   text-transform: uppercase; color: var(--faint); margin-bottom: 6px;
 }
 .side a { display: block; color: var(--muted); font-size: 0.9rem; padding: 3px 0; }
-.side a:hover { color: var(--accent); text-decoration: none; }
+.side a:hover { color: var(--accent-text); text-decoration: none; }
 .cli-main { min-width: 0; }
 .cli-main h1 { font-size: 1.9rem; margin: 6px 0 4px; }
 
@@ -83,7 +85,7 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 .cmd h3 { font-size: 0.86rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 18px 0 8px; }
 .group-tag {
   font-family: var(--mono); font-size: 0.62rem; font-weight: 500;
-  letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text);
   background: var(--accent-soft); border-radius: 999px; padding: 3px 9px;
 }
 .short { color: var(--muted); margin: 4px 0; }

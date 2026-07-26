@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="wecom-calendar-cli">
-  <rect width="64" height="64" rx="14" fill="#0b0d12"/>
-  <g fill="none" stroke="#07c160" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="64" height="64" rx="14" fill="#070b16"/>
+  <g fill="none" stroke="#1464f0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
     <rect x="12" y="16" width="40" height="36" rx="6"/>
     <path d="M12 27h40"/>
     <path d="M22 10v9M42 10v9"/>
   </g>
-  <g fill="#4de3a0">
+  <g fill="#6a5cf5">
     <rect x="19" y="34" width="9" height="6" rx="2"/>
     <rect x="33" y="34" width="12" height="6" rx="2"/>
     <rect x="19" y="43" width="14" height="5" rx="2"/>
