@@ -142,12 +142,17 @@ func parseEvent(ev *goical.Event, tz tzMap, defaultLoc *time.Location) (Event, e
 			e.RRuleOption = opt
 		}
 	}
+	// EXDATE is parsed as strictly as every other date field. Skipping an
+	// unparseable one would drop an exclusion, and a dropped exclusion is not a
+	// missing detail — it resurrects a cancelled occurrence as a live meeting.
 	for _, p := range ev.Props.Values("EXDATE") {
 		for _, part := range strings.Split(p.Value, ",") {
 			pp := goical.Prop{Name: "EXDATE", Params: p.Params, Value: part}
-			if t, allDay, err := parseValue(&pp, tz, defaultLoc); err == nil {
-				e.ExDates = append(e.ExDates, OccurrenceKey(t, allDay))
+			t, allDay, err := parseValue(&pp, tz, defaultLoc)
+			if err != nil {
+				return e, fmt.Errorf("ical: VEVENT %q EXDATE %q: %w", e.UID, part, err)
 			}
+			e.ExDates = append(e.ExDates, OccurrenceKey(t, allDay))
 		}
 	}
 	for _, p := range ev.Props.Values("ATTENDEE") {

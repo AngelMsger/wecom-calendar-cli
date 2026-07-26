@@ -49,12 +49,12 @@ func TestRebuildExpandsRecurring(t *testing.T) {
 	st := openStore(t)
 	seedMaster(t, st, "u1", recurringICS)
 
-	n, err := Rebuild(st, opts())
+	res, err := Rebuild(st, opts())
 	if err != nil {
 		t.Fatalf("rebuild: %v", err)
 	}
-	if n != 3 {
-		t.Fatalf("want 3 occurrences from COUNT=3, got %d", n)
+	if res.Instances != 3 {
+		t.Fatalf("want 3 occurrences from COUNT=3, got %d", res.Instances)
 	}
 	if v, ok, _ := st.GetSyncMeta(store.MetaCoveredStartMs); !ok || v == "" {
 		t.Fatal("covered window not recorded")

@@ -101,22 +101,33 @@ func newSyncCmd(s *appState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// Rebuild the expanded/deduped instances so queries are ready.
-			instances, err := expandpkg.Rebuild(st, expandpkg.Options{
-				Since: expandWindowStart(), Until: expandWindowEnd(), Loc: loc,
+			// Rebuild the expanded/deduped instances so queries are ready. The
+			// window is whatever `expand --since/--until` pinned, falling back to
+			// the rolling default — rebuilding on the default unconditionally would
+			// silently discard a window the user widened, which is exactly what the
+			// coverage notice tells them to do about a short window.
+			expandSince, expandUntil, pinned := resolveExpandWindow(st)
+			rebuilt, err := expandpkg.Rebuild(st, expandpkg.Options{
+				Since: expandSince, Until: expandUntil, Loc: loc,
 			})
 			if err != nil {
 				return err
 			}
-			return s.emit(map[string]any{
+			s.truncationNotice(rebuilt)
+			out := map[string]any{
 				"mode":                res.Mode,
 				"calendars_total":     res.CalendarsTotal,
 				"calendars_scanned":   res.CalendarsScanned,
 				"resources_fetched":   res.ResourcesFetched,
 				"events_upserted":     res.EventsUpserted,
 				"events_soft_deleted": res.EventsSoftDeleted,
-				"instances_rebuilt":   instances,
-			})
+				"instances_rebuilt":   rebuilt.Instances,
+				"covered_from":        expandSince.UTC().Format(time.RFC3339),
+				"covered_to":          expandUntil.UTC().Format(time.RFC3339),
+				"window_pinned":       pinned,
+			}
+			addTruncation(out, rebuilt)
+			return s.emit(out)
 		},
 	}
 	f := cmd.Flags()

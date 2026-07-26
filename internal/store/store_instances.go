@@ -15,6 +15,22 @@ const (
 	MetaCoveredEndMs   = "expand_covered_end_ms"
 )
 
+// Metadata keys recording an explicitly pinned expansion window. `expand` with
+// --since/--until sets them; `sync` honors them so a widened (or narrowed)
+// window survives the automatic rebuild at the end of every sync instead of
+// silently reverting to the rolling default. `expand` with no flags clears them.
+const (
+	MetaPinnedStartMs = "expand_pinned_start_ms"
+	MetaPinnedEndMs   = "expand_pinned_end_ms"
+)
+
+// escapeLike escapes the LIKE metacharacters in a literal so it matches
+// verbatim under an `ESCAPE '\'` clause.
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
+
 // MasterRow is a live master event needed to (re)build instances.
 type MasterRow struct {
 	UID            string
@@ -154,8 +170,12 @@ func (s *Store) QueryInstances(sinceMs, untilMs int64, calID string, statuses []
 	                  THEN start_at_ms + 1 ELSE end_at_ms END) > ?`
 	args := []any{untilMs, sinceMs}
 	if calID != "" {
-		q += " AND (primary_calendar_id=? OR source_calendar_ids LIKE ?)"
-		args = append(args, calID, "%\""+calID+"\"%")
+		// source_calendar_ids is a JSON array of quoted ids, so membership is a
+		// substring test on the quoted form. The id is escaped and an ESCAPE
+		// clause declared, so a `%` or `_` inside an id matches literally instead
+		// of acting as a LIKE wildcard.
+		q += ` AND (primary_calendar_id=? OR source_calendar_ids LIKE ? ESCAPE '\')`
+		args = append(args, calID, `%"`+escapeLike(calID)+`"%`)
 	}
 	if len(statuses) > 0 {
 		q += " AND UPPER(COALESCE(status,'')) IN (" + placeholders(len(statuses)) + ")"

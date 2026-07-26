@@ -88,6 +88,18 @@ and — critically — keeps any metadata attached to that UID resolvable. `even
 list` hides soft-deleted events by default. A hard purge is out of scope for
 routine sync.
 
+## The recurrence rebuild at the end of a sync
+
+Every `sync` finishes by rebuilding the expanded occurrences that `event list`
+reads. It uses the window pinned by an earlier `expand --since/--until` if there
+is one, and the rolling default (2 years back to 1 year ahead) otherwise — so
+widening coverage once survives every later sync instead of reverting. The sync
+result reports the window it used as `covered_from` / `covered_to` plus
+`window_pinned`, and flags any series cut short by the per-event occurrence
+limit as `truncated_events` / `truncated_uids` (with an
+`{"_notice":{"expansion_truncated":…}}` line on stderr). See
+[querying.md](querying.md).
+
 ## Metadata is never touched
 
 `sync` (and the recurrence rebuild it triggers) writes only the raw-fact and

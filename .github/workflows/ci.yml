@@ -28,6 +28,21 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # The release workflow invokes scripts/build.sh directly (via `make
+      # cross`), so a script committed without its exec bit fails on release day
+      # rather than here. CI does not run `make cross` — this check is what
+      # keeps that failure out of a release.
+      - name: scripts are executable
+        run: |
+          status=0
+          for script in scripts/*.sh; do
+            if [ ! -x "$script" ]; then
+              echo "$script is not executable — run: git update-index --chmod=+x $script"
+              status=1
+            fi
+          done
+          exit $status
+
       - name: cli docs up to date
         run: |
           go run ./cmd/gen-docs

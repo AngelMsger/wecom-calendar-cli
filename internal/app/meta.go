@@ -56,7 +56,13 @@ func newMetaSetCmd(s *appState) *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			exists, _ := st.EventExists(uid)
+			// A store read failure must not masquerade as "this uid is unknown" —
+			// that warning would send the caller looking for a missing event
+			// instead of at the real problem.
+			exists, err := st.EventExists(uid)
+			if err != nil {
+				return err
+			}
 			if err := st.MetaSet(uid, ns, key, valueJSON, source, time.Now()); err != nil {
 				return err
 			}

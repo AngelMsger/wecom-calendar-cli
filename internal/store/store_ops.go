@@ -271,19 +271,32 @@ func (s *Store) ClearResourceFailure(calID, href string) error {
 	return err
 }
 
-// PruneResourceFailuresNotIn drops failure records for resources the server no
-// longer lists, so the table does not grow unbounded.
-func (s *Store) PruneResourceFailuresNotIn(calID string, keepHrefs []string) error {
-	q := `DELETE FROM calendar_resource_failures WHERE calendar_id=?`
-	args := []any{calID}
-	if len(keepHrefs) > 0 {
-		q += " AND href NOT IN (" + placeholders(len(keepHrefs)) + ")"
-		for _, h := range keepHrefs {
+// deleteChunk bounds how many hrefs are bound into one DELETE. SQLite caps host
+// parameters per statement (SQLITE_MAX_VARIABLE_NUMBER, 32766 on the builds this
+// driver ships), so a large calendar must be deleted in batches rather than in
+// one statement with a parameter per row.
+const deleteChunk = 500
+
+// DeleteResourceFailures drops the given resources' failure records. Callers
+// pass the exact set to remove — normally a handful of stale entries — rather
+// than the calendar's full href list, so the statement stays far below SQLite's
+// host-parameter limit even for a calendar with tens of thousands of events.
+func (s *Store) DeleteResourceFailures(calID string, hrefs []string) error {
+	for start := 0; start < len(hrefs); start += deleteChunk {
+		end := min(start+deleteChunk, len(hrefs))
+		batch := hrefs[start:end]
+		args := make([]any, 0, len(batch)+1)
+		args = append(args, calID)
+		for _, h := range batch {
 			args = append(args, h)
 		}
+		if _, err := s.db.Exec(
+			`DELETE FROM calendar_resource_failures
+			 WHERE calendar_id=? AND href IN (`+placeholders(len(batch))+`)`, args...); err != nil {
+			return err
+		}
 	}
-	_, err := s.db.Exec(q, args...)
-	return err
+	return nil
 }
 
 func (s *Store) TouchResource(calID, href string, now time.Time) error {

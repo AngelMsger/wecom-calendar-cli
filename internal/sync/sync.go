@@ -295,9 +295,14 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		}
 		stats.EventsSoftDeleted += n
 	}
-	// Drop failure records for resources the server no longer lists.
-	if err := st.PruneResourceFailuresNotIn(cal.ID, allHrefs); err != nil {
-		return err
+	// Drop failure records for resources the server no longer lists. The stale
+	// set is computed here (from the failures already loaded above) rather than
+	// by handing the store every href, so the DELETE binds a handful of
+	// parameters instead of one per event in the calendar.
+	if stale := staleFailures(failed, allHrefs); len(stale) > 0 {
+		if err := st.DeleteResourceFailures(cal.ID, stale); err != nil {
+			return err
+		}
 	}
 
 	// Commit the ctag only after every resource for this calendar landed AND
@@ -323,6 +328,26 @@ func recordFailure(st *store.Store, calID string, ref caldav.EventRef, reason st
 	}
 	_ = st.RecordResourceFailure(calID, ref.Href, ref.Etag, reason, now)
 	return true
+}
+
+// staleFailures returns the recorded-failure hrefs the server no longer lists,
+// i.e. the entries safe to forget. Both inputs come from this calendar's scan,
+// so the result is bounded by the number of failures, not by calendar size.
+func staleFailures(failed map[string]string, listed []string) []string {
+	if len(failed) == 0 {
+		return nil
+	}
+	live := make(map[string]struct{}, len(listed))
+	for _, h := range listed {
+		live[h] = struct{}{}
+	}
+	var stale []string
+	for href := range failed {
+		if _, ok := live[href]; !ok {
+			stale = append(stale, href)
+		}
+	}
+	return stale
 }
 
 // startFetchHeartbeat runs a timer that emits a fetching progress event every

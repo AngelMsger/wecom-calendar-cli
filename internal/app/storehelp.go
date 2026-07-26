@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	expandpkg "github.com/angelmsger/wecom-calendar-cli/internal/expand"
 	"github.com/angelmsger/wecom-calendar-cli/internal/output"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
@@ -65,6 +66,41 @@ func (s *appState) staleNotice(st *store.Store) {
 			"stale": map[string]any{
 				"last_sync_at": lastISO,
 				"message":      "local data may be stale; run `wecom-calendar-cli sync`",
+			},
+		},
+	})
+}
+
+// msToTime parses a stored epoch-millisecond string back into a time.
+func msToTime(v string) (time.Time, error) {
+	ms, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.UnixMilli(ms).UTC(), nil
+}
+
+// msString renders a time as the epoch-millisecond string the metadata table
+// stores.
+func msString(t time.Time) string {
+	return strconv.FormatInt(t.UTC().UnixMilli(), 10)
+}
+
+// truncationNotice emits a stderr notice when a rebuild capped some event's
+// expansion, so the cap is visible to an agent that only watches `_notice`
+// lines. The exact counts also travel on stdout (see addTruncation).
+func (s *appState) truncationNotice(res expandpkg.Result) {
+	if len(res.Truncated) == 0 {
+		return
+	}
+	output.EmitNotice(os.Stderr, map[string]any{
+		"_notice": map[string]any{
+			"expansion_truncated": map[string]any{
+				"events":       len(res.Truncated),
+				"limit":        expandpkg.MaxInstancesPerEvent,
+				"sample_uids":  truncatedSample(res.Truncated),
+				"message":      "some recurring events hit the per-event occurrence limit; their later occurrences are missing from this window",
+				"how_to_avoid": "narrow the expansion window with `wecom-calendar-cli expand --since <date> --until <date>`",
 			},
 		},
 	})

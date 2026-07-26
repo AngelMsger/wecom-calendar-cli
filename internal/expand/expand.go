@@ -16,9 +16,10 @@ import (
 	"github.com/teambition/rrule-go"
 )
 
-// maxInstancesPerEvent caps expansion of a single unbounded rule so a stray
-// FREQ=DAILY without UNTIL cannot explode the table.
-const maxInstancesPerEvent = 2000
+// MaxInstancesPerEvent caps expansion of a single unbounded rule so a stray
+// FREQ=DAILY without UNTIL cannot explode the table. Hitting it is reported in
+// Result.Truncated rather than applied silently.
+const MaxInstancesPerEvent = 2000
 
 // Options configures a rebuild.
 type Options struct {
@@ -28,16 +29,30 @@ type Options struct {
 	CalendarPriority []string // preferred primary calendars, most-preferred first
 }
 
-// Rebuild recomputes every event_instances row and returns the count written.
+// Result summarizes a rebuild. Truncated names the events whose expansion hit
+// MaxInstancesPerEvent, so the cap is reported rather than silently applied: a
+// caller can surface "this series is cut short in the window you asked for"
+// instead of letting the occurrences simply stop mid-window.
+type Result struct {
+	Instances int
+	Truncated []string // uids capped at MaxInstancesPerEvent
+}
+
+// Rebuild recomputes every event_instances row and returns what it wrote.
 // It computes every row first and only then replaces the table atomically, so a
 // parse or write failure aborts with the previous instances intact rather than
 // leaving `event list` reading an empty or half-built table. A stored master
-// that fails to reparse is a genuine inconsistency (sync only stores parseable
-// resources) and aborts the rebuild rather than being silently skipped.
-func Rebuild(st *store.Store, opts Options) (int, error) {
+// that fails to reparse — or whose recurrence rule will not build — is a genuine
+// inconsistency (sync only stores parseable resources) and aborts the rebuild
+// rather than being silently skipped or degraded to a single occurrence.
+func Rebuild(st *store.Store, opts Options) (Result, error) {
+	var res Result
+	if opts.Loc == nil {
+		opts.Loc = time.UTC
+	}
 	masters, err := st.MastersForExpansion()
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 	byUID := map[string][]store.MasterRow{}
 	var order []string
@@ -57,13 +72,20 @@ func Rebuild(st *store.Store, opts Options) (int, error) {
 
 		evs, err := ical.Parse(primary.RawICS, opts.Loc)
 		if err != nil {
-			return 0, fmt.Errorf("expand: reparsing stored event %q: %w", uid, err)
+			return res, fmt.Errorf("expand: reparsing stored event %q: %w", uid, err)
 		}
 		master, overrides := split(evs, uid)
 		if master == nil {
 			continue // only override components stored for this uid; nothing to expand
 		}
-		for _, o := range expandOccurrences(*master, overrides, opts) {
+		occurrences, truncated, err := expandOccurrences(*master, overrides, opts)
+		if err != nil {
+			return res, fmt.Errorf("expand: event %q: %w", uid, err)
+		}
+		if truncated {
+			res.Truncated = append(res.Truncated, uid)
+		}
+		for _, o := range occurrences {
 			rows = append(rows, store.InstanceRow{
 				UID:               uid,
 				OccurrenceKey:     o.key,
@@ -82,9 +104,10 @@ func Rebuild(st *store.Store, opts Options) (int, error) {
 	// One transaction: clear, insert every row, and record the covered window so
 	// queries beyond it can flag partial coverage. Nothing is visible until commit.
 	if err := st.ReplaceInstances(rows, opts.Since.UTC().UnixMilli(), opts.Until.UTC().UnixMilli()); err != nil {
-		return 0, err
+		return res, err
 	}
-	return len(rows), nil
+	res.Instances = len(rows)
+	return res, nil
 }
 
 type occurrence struct {
@@ -94,7 +117,12 @@ type occurrence struct {
 	start, end time.Time
 }
 
-func expandOccurrences(master ical.Event, overrides map[string]ical.Event, opts Options) []occurrence {
+// expandOccurrences returns one occurrence per date the master produces in the
+// window, plus whether the per-event cap was hit. A recurrence rule that will
+// not build is an error rather than a silent collapse to a single occurrence:
+// the resource parsed cleanly at sync time, so a failure here means the stored
+// rule is genuinely inconsistent and the caller should see it.
+func expandOccurrences(master ical.Event, overrides map[string]ical.Event, opts Options) ([]occurrence, bool, error) {
 	duration := time.Duration(0)
 	if !master.End.IsZero() && !master.Start.IsZero() {
 		duration = master.End.Sub(master.Start)
@@ -129,22 +157,21 @@ func expandOccurrences(master ical.Event, overrides map[string]ical.Event, opts 
 	// Non-recurring: a single occurrence at the master's start.
 	if master.RRuleOption == nil {
 		if o, ok := build(master.Start); ok {
-			return []occurrence{o}
+			return []occurrence{o}, false, nil
 		}
-		return nil
+		return nil, false, nil
 	}
 
 	rr, err := rrule.NewRRule(*master.RRuleOption)
 	if err != nil {
-		if o, ok := build(master.Start); ok {
-			return []occurrence{o}
-		}
-		return nil
+		return nil, false, fmt.Errorf("building recurrence rule %q: %w", master.RRule, err)
 	}
 	var out []occurrence
+	truncated := false
 	seen := map[string]bool{}
 	for i, nominal := range rr.Between(opts.Since, opts.Until, true) {
-		if i >= maxInstancesPerEvent {
+		if i >= MaxInstancesPerEvent {
+			truncated = true
 			break
 		}
 		if o, ok := build(nominal); ok {
@@ -167,7 +194,7 @@ func expandOccurrences(master ical.Event, overrides map[string]ical.Event, opts 
 				orDefault(ov.Status, master.Status), ov.Start, end})
 		}
 	}
-	return out
+	return out, truncated, nil
 }
 
 // split returns the master event and the RECURRENCE-ID overrides (keyed by

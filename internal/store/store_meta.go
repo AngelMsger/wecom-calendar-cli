@@ -138,6 +138,16 @@ func (s *Store) GetSyncMeta(key string) (string, bool, error) {
 	}
 }
 
+// DeleteSyncMeta removes an internal metadata key, if present.
+func (s *Store) DeleteSyncMeta(keys ...string) error {
+	for _, k := range keys {
+		if _, err := s.db.Exec(`DELETE FROM metadata WHERE key=?`, k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // EventExists reports whether a live master event with the given uid exists, so
 // meta writes can warn about attaching to an unknown event.
 func (s *Store) EventExists(uid string) (bool, error) {

@@ -357,13 +357,15 @@ automatically at the end of `sync`. Never touches your metadata.
 Occurrences are expanded over a window (default 2 years back to 1 year
 ahead). Pass --since/--until to widen it when you need to query further
 into the past or future; a query beyond the window prints a coverage
-notice on stderr.</p>
+notice on stderr. A window set that way is remembered and reused by every
+later `sync`, so it survives the next refresh; run `expand` with no flags
+to forget it and return to the rolling default.</p>
       <h3>Options</h3>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
-        <tr><td><code>--since</code></td><td></td><td>expansion window start YYYY-MM-DD (default 2 years ago)</td></tr>
-        <tr><td><code>--until</code></td><td></td><td>expansion window end YYYY-MM-DD (default 1 year ahead)</td></tr>
+        <tr><td><code>--since</code></td><td></td><td>expansion window start YYYY-MM-DD (default 2 years ago); pins the window for later syncs</td></tr>
+        <tr><td><code>--until</code></td><td></td><td>expansion window end YYYY-MM-DD (default 1 year ahead); pins the window for later syncs</td></tr>
         </tbody>
       </table>
       <h3>Examples</h3><pre>  wecom-calendar-cli expand

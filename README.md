@@ -19,6 +19,8 @@ is never touched by sync, so annotations survive every refresh. The only writes
 
 📖 **Documentation site:** <https://angelmsger.github.io/wecom-calendar-cli/>
 
+![wecom-calendar-cli — sync WeCom calendars into a local store and query them from your terminal](docs/image.png)
+
 > **The WeCom app-password caveat.** Auth is HTTP Basic — your full WeCom email
 > as the username and an **app-specific CalDAV password** as the secret (not
 > your normal login password). Get it in the WeCom **mobile app**: Workbench →
@@ -183,8 +185,9 @@ make docs       # regenerate the CLI reference under docs/cli/
 The [`docs/cli/`](docs/cli/) reference is generated from the cobra command tree
 by `cmd/gen-docs`, so it always matches `--help`. After changing a command or
 flag, run `make docs` and commit the result — CI fails if it drifts. See
-[AGENTS.md](AGENTS.md) for the architecture and `internal/` package layout, and
-[CHANGELOG.md](CHANGELOG.md) for the version history.
+[AGENTS.md](AGENTS.md) for the architecture and `internal/` package layout,
+[docs/releasing.md](docs/releasing.md) for the release and npm trusted-publishing
+process, and [CHANGELOG.md](CHANGELOG.md) for the version history.
 
 ## Related
 

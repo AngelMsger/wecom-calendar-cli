@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-26
+
 ### Fixed
+
+- **A widened expansion window survives the next `sync`.** `sync` always
+  rebuilt occurrences over the rolling default window (2 years back, 1 year
+  ahead), wiping whatever `expand --since/--until` had established. Since the
+  coverage notice tells you to widen with `expand` and the companion Skill tells
+  agents to re-`sync` whenever a read is stale, the two instructions undid each
+  other on every cycle. An explicit `expand --since/--until` now **pins** the
+  window and every later `sync` reuses it; `expand` with no flags clears the pin
+  and returns to the default. Both commands report `covered_from`,
+  `covered_to` and `window_pinned`.
+- **The per-event occurrence cap is no longer silent.** Expansion stops at 2000
+  occurrences for a single rule (so an unbounded `FREQ=DAILY` cannot explode the
+  table), but it did so without a word — a series simply stopped part-way
+  through the requested window, indistinguishable from a series that genuinely
+  ended. `sync` and `expand` now report `truncated_events` / `truncated_uids` on
+  stdout and an `{"_notice":{"expansion_truncated":…}}` line on stderr.
+- **An unparseable `EXDATE` no longer resurrects a cancelled occurrence.** Every
+  other date field failed the resource on a parse error, but `EXDATE` values
+  were skipped silently — dropping an exclusion, which puts a cancelled meeting
+  back on the calendar as a live one. It is now parsed as strictly as `DTSTART`.
+- **A recurrence rule that will not build is an error, not a silent collapse.**
+  `expand` degraded such an event to a single occurrence, quietly losing the
+  whole series; it now fails the rebuild (atomically, leaving prior instances
+  intact) and names the offending event.
+- **A large calendar no longer risks exceeding SQLite's parameter limit.**
+  Pruning stale resource-failure records bound one host parameter per event in
+  the calendar; the stale set is now computed in Go and deleted in batches.
+- **`event list --calendar` matches ids literally.** The calendar filter used an
+  unescaped `LIKE`, so `%` or `_` in an id acted as a wildcard.
+- **A store read failure during `meta set` is reported as itself** rather than
+  surfacing as a misleading "no live event with this uid" warning.
 
 - **Incremental `sync` is incremental again.** A single resource the server
   permanently 404s (or that won't parse) used to withhold its whole calendar's
@@ -91,4 +124,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CI on Linux. Live end-to-end behavior against the real WeCom server is
   verified manually.
 
-[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/commits/main
+[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/AngelMsger/wecom-calendar-cli/releases/tag/v0.1.0

@@ -39,6 +39,15 @@ wecom-calendar-cli event list --since 2026-07-21 --until 2026-07-26 --calendar <
 - Occurrences are expanded over a bounded window (default 2 years back to 1 year
   ahead). A query beyond that prints a `{"_notice":{"partial_coverage":…}}` on
   stderr; widen it with `wecom-calendar-cli expand --since <date> --until <date>`.
+  A window set that way is **pinned**: every later `sync` reuses it, so it does
+  not revert on the next refresh. Run `expand` with no flags to forget the pin
+  and go back to the rolling default. Both commands report the window they used
+  as `covered_from` / `covered_to` and whether it was pinned (`window_pinned`).
+- A very long window can push a frequently recurring series past the per-event
+  occurrence limit. When that happens the run prints
+  `{"_notice":{"expansion_truncated":…}}` on stderr and reports
+  `truncated_events` / `truncated_uids` on stdout — the later occurrences of
+  those series are missing from the window. Narrow the window to get them back.
 - `--status <csv>` keeps only the listed statuses (case-insensitive), e.g.
   `--status confirmed,tentative` to drop CANCELLED occurrences.
 - `--include-meta` attaches each event's custom metadata inline (see
