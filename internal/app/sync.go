@@ -58,24 +58,15 @@ func newSyncCmd(s *appState) *cobra.Command {
 					if calendarID != "" && c.ID != calendarID {
 						continue
 					}
-					would, reason := true, "ctag changed"
-					switch {
-					case full:
-						reason = "full rescan"
-					case !exists:
-						reason = "never synced"
-					default:
-						stored, ok, err := st.CalendarState(c.ID)
-						if err != nil {
+					var stored string
+					var stateFound bool
+					if exists && !full {
+						var err error
+						if stored, stateFound, err = st.CalendarState(c.ID); err != nil {
 							return err
 						}
-						switch {
-						case !ok || stored == "":
-							reason = "never synced"
-						case stored == c.Ctag:
-							would, reason = false, "ctag unchanged"
-						}
 					}
+					would, reason := scanDecision(full, exists, stateFound, stored, c.Ctag)
 					rows = append(rows, dryRow{ID: c.ID, Name: c.DisplayName, WouldScan: would, Reason: reason})
 				}
 				return s.emit(map[string]any{"dry_run": true, "calendars": rows})
@@ -137,6 +128,33 @@ func newSyncCmd(s *appState) *cobra.Command {
 	f.StringVar(&progressMode, "progress", "auto", "progress on stderr: auto (a live line on a terminal, bounded JSON notices otherwise), none, or json")
 	enumComplete(cmd, "progress", "auto", "none", "json")
 	return cmd
+}
+
+// scanDecision reports whether `sync` would scan a calendar, and why, mirroring
+// the skip rule in internal/sync. It is separate from the command so the
+// reasons — which are what a user reads when diagnosing a slow sync — can be
+// tested directly.
+//
+// The no-change-tag case is called out explicitly. A server that returns an
+// empty getctag gives us nothing to compare, so the calendar must be re-listed
+// on every sync to notice changes at all; that is correct, but reporting it as
+// "never synced" (which the store's empty stored ctag otherwise looks like) is
+// wrong and actively misleading — the calendar may have synced many times.
+func scanDecision(full, storeExists, stateFound bool, storedCtag, serverCtag string) (bool, string) {
+	switch {
+	case full:
+		return true, "full rescan"
+	case !storeExists:
+		return true, "never synced"
+	case serverCtag == "":
+		return true, "server sends no change-tag, so this calendar is re-listed every sync"
+	case !stateFound || storedCtag == "":
+		return true, "never synced"
+	case storedCtag == serverCtag:
+		return false, "ctag unchanged"
+	default:
+		return true, "ctag changed"
+	}
 }
 
 // syncWindowStart/End bound the CalDAV calendar-query used to enumerate events.

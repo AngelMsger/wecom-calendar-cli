@@ -49,6 +49,24 @@ forces its whole calendar to re-scan forever. `--full` re-attempts them.
 > to store fresh change-tags and record the broken resources, so the *first*
 > `sync` after updating re-fetches everything one more time. Every sync after
 > that skips unchanged calendars and only fetches what actually moved.
+>
+> Measured on a real account (11 calendars, 3025 resources): the migration run
+> took 699s and fetched all 3025; the next runs fetched 0 and took ~3s. If a
+> `sync` still re-fetches everything on the *second* run, that is a real problem
+> — check `resources_fetched` in the result, not the wall-clock time.
+
+### Why `calendars_scanned` is rarely zero
+
+A calendar can only be skipped when the server hands out a change-tag to compare
+against. This server returns an **empty** `getctag` for at least one collection,
+and an empty tag carries no information — so that calendar is re-listed on every
+sync. That costs one `REPORT`, not a re-fetch: the per-resource comparison still
+skips every unchanged resource, so `resources_fetched` stays 0.
+
+`sync --dry-run` names this case explicitly ("server sends no change-tag"), so
+do not read it as "never synced". **`resources_fetched` is the number that tells
+you whether a sync did real work**; `calendars_scanned` counts re-listings,
+which are cheap.
 
 ## Cadence — how often to sync
 

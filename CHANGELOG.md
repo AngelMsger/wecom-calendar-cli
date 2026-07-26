@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`sync --dry-run` no longer reports a synced calendar as "never synced".**
+  This server returns an empty `getctag` for one collection. An empty stored tag
+  and an empty server tag are indistinguishable from a calendar that has never
+  been synced, so the preview mislabelled it — while diagnosing a slow sync,
+  that sends you looking for the wrong cause. The preview now says "server sends
+  no change-tag, so this calendar is re-listed every sync", which is what is
+  actually happening.
+
+### Documentation
+
+- **Recorded what an incremental sync actually costs**, measured on a real
+  account (11 calendars, 3025 resources): the one-time migration run after
+  upgrading took 699s and fetched all 3025 resources; every run after it fetched
+  0 and took about 3s. `syncing.md` now says plainly that `resources_fetched` —
+  not wall-clock time, and not `calendars_scanned` — is the number that tells
+  you whether a sync did real work, and explains why a calendar with no
+  server-issued change-tag is re-listed every time (a `REPORT`, never a
+  re-fetch).
+
 ## [0.1.0] - 2026-07-26
 
 ### Fixed

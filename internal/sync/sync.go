@@ -137,6 +137,14 @@ func Run(ctx context.Context, client caldav.Client, st *store.Store, opts Option
 		if err := st.UpsertCalendar(cal.ID, cal.Href, cal.DisplayName, cal.Ctag, now); err != nil {
 			return finalize(stats, err)
 		}
+		// A calendar is skipped only when the server gave us a non-empty ctag that
+		// matches the one we stored. The `stored != ""` guard is deliberate: this
+		// server returns an empty getctag for at least one collection, and an
+		// empty-equals-empty match would skip it forever and silently miss every
+		// change. Such a calendar is therefore re-listed on every sync — a REPORT
+		// each time, but no event fetches, since the per-resource etag comparison
+		// below still skips unchanged resources. `sync --dry-run` reports this as
+		// "server sends no change-tag" rather than "never synced".
 		if !opts.Full {
 			if stored, ok, err := st.CalendarState(cal.ID); err != nil {
 				return finalize(stats, err)
