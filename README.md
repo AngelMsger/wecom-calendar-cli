@@ -77,7 +77,7 @@ Or download a prebuilt binary from the
 ### 2. Deploy the companion Skill
 
 The `wecom-calendar` Skill is embedded in the binary; it teaches your coding
-agent (**Claude Code**, **Codex**, **Grok Build**) how to drive the CLI. `skill install` probes
+agent (**Claude Code**, **Codex**, **Grok Build**, **Pi**) how to drive the CLI. `skill install` probes
 for installed agents and installs into each one found:
 
 ```bash
@@ -136,7 +136,7 @@ calendar data and is never committed.
 | `meta set` / `get` / `list` / `delete` | maintain the agent-owned metadata layer, keyed by event UID |
 | `config` / `auth` / `doctor` | setup, credentials and diagnostics |
 | `config get-contexts` / `use-context` / `delete-context` | manage multiple named servers |
-| `skill install` / `skill uninstall` | deploy or remove the embedded companion Skill (Claude Code, Codex, Grok Build) |
+| `skill install` / `skill uninstall` | deploy or remove the embedded companion Skill (Claude Code, Codex, Grok Build, Pi, Pi) |
 | `version` / `completion` | build info and shell completion |
 
 In the default JSON output, list commands return a `{items, next, has_more}`

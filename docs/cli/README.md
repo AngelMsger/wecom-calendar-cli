@@ -66,7 +66,7 @@ is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.
 
 | Command | Description |
 | --- | --- |
-| [`wecom-calendar-cli skill`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-skill) | Install the companion Skill for coding agents (Claude Code, Codex, Grok Build) |
+| [`wecom-calendar-cli skill`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-skill) | Install the companion Skill for coding agents (Claude Code, Codex, Grok Build, Pi) |
 | [`wecom-calendar-cli skill install`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-skill-install) | Deploy the embedded Skill into a coding agent's skills directory |
 | [`wecom-calendar-cli skill path`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-skill-path) | Print where the Skill would be installed, and whether it is |
 | [`wecom-calendar-cli skill show`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-skill-show) | Print the embedded SKILL.md to stdout |
