@@ -8,88 +8,68 @@ import (
 
 func TestAgentIDs(t *testing.T) {
 	t.Parallel()
+	want := []string{
+		"claude-code", "codex", "cursor", "agents", "gemini", "github-copilot",
+		"opencode", "continue", "windsurf", "grok", "pi", "kilo", "roo",
+	}
 	ids := agentIDs()
-	want := map[string]bool{
-		"claude-code": true,
-		"codex":       true,
-		"grok":        true,
-		"pi":          true,
-	}
 	if len(ids) != len(want) {
-		t.Fatalf("agentIDs() = %v, want %d entries", ids, len(want))
+		t.Fatalf("agentIDs() = %v (%d), want %d entries", ids, len(ids), len(want))
 	}
+	got := map[string]bool{}
 	for _, id := range ids {
-		if !want[id] {
-			t.Errorf("unexpected agent id %q", id)
+		got[id] = true
+	}
+	for _, id := range want {
+		if !got[id] {
+			t.Errorf("missing agent id %q", id)
 		}
-		delete(want, id)
-	}
-	for missing := range want {
-		t.Errorf("missing agent id %q", missing)
 	}
 }
 
-func TestGrokAgentDest(t *testing.T) {
+func TestAgentDests(t *testing.T) {
 	t.Parallel()
-	spec, ok := agentByID("grok")
-	if !ok {
-		t.Fatal("grok agentSpec is missing")
+	cases := []struct {
+		id              string
+		wantHomeSuffix  string
+		wantProjectPath string
+	}{
+		{"claude-code", filepath.Join(".claude", "skills", "wecom-calendar"), filepath.Join(".claude", "skills", "wecom-calendar")},
+		{"codex", filepath.Join(".codex", "skills", "wecom-calendar"), filepath.Join(".agents", "skills", "wecom-calendar")},
+		{"cursor", filepath.Join(".cursor", "skills", "wecom-calendar"), filepath.Join(".cursor", "skills", "wecom-calendar")},
+		{"agents", filepath.Join(".agents", "skills", "wecom-calendar"), filepath.Join(".agents", "skills", "wecom-calendar")},
+		{"gemini", filepath.Join(".gemini", "skills", "wecom-calendar"), filepath.Join(".gemini", "skills", "wecom-calendar")},
+		{"github-copilot", filepath.Join(".copilot", "skills", "wecom-calendar"), filepath.Join(".agents", "skills", "wecom-calendar")},
+		{"opencode", filepath.Join(".config", "opencode", "skills", "wecom-calendar"), filepath.Join(".opencode", "skills", "wecom-calendar")},
+		{"continue", filepath.Join(".continue", "skills", "wecom-calendar"), filepath.Join(".continue", "skills", "wecom-calendar")},
+		{"windsurf", filepath.Join(".codeium", "windsurf", "skills", "wecom-calendar"), filepath.Join(".windsurf", "skills", "wecom-calendar")},
+		{"grok", filepath.Join(".grok", "skills", "wecom-calendar"), filepath.Join(".grok", "skills", "wecom-calendar")},
+		{"pi", filepath.Join(".pi", "agent", "skills", "wecom-calendar"), filepath.Join(".pi", "skills", "wecom-calendar")},
+		{"kilo", filepath.Join(".kilocode", "skills", "wecom-calendar"), filepath.Join(".kilocode", "skills", "wecom-calendar")},
+		{"roo", filepath.Join(".roo", "skills", "wecom-calendar"), filepath.Join(".roo", "skills", "wecom-calendar")},
 	}
-	if spec.homeSub != ".grok" {
-		t.Fatalf("homeSub = %q, want .grok", spec.homeSub)
-	}
-	if spec.projectSkills != ".grok/skills" {
-		t.Fatalf("projectSkills = %q, want .grok/skills", spec.projectSkills)
-	}
-
-	projectPath, err := agentDest(spec, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantProject := filepath.Join(".grok", "skills", "wecom-calendar")
-	if projectPath != wantProject {
-		t.Fatalf("project dest = %q, want %q", projectPath, wantProject)
-	}
-
-	homePath, err := agentDest(spec, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	suffix := filepath.Join(".grok", "skills", "wecom-calendar")
-	if !strings.HasSuffix(homePath, suffix) {
-		t.Fatalf("home dest %q does not end with %q", homePath, suffix)
-	}
-}
-
-func TestPiAgentDest(t *testing.T) {
-	t.Parallel()
-	spec, ok := agentByID("pi")
-	if !ok {
-		t.Fatal("pi agentSpec is missing")
-	}
-	// Global: ~/.pi/agent/skills/<name>  (homeSub is .pi/agent)
-	if spec.homeSub != ".pi/agent" {
-		t.Fatalf("homeSub = %q, want .pi/agent", spec.homeSub)
-	}
-	if spec.projectSkills != ".pi/skills" {
-		t.Fatalf("projectSkills = %q, want .pi/skills", spec.projectSkills)
-	}
-
-	projectPath, err := agentDest(spec, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantProject := filepath.Join(".pi", "skills", "wecom-calendar")
-	if projectPath != wantProject {
-		t.Fatalf("project dest = %q, want %q", projectPath, wantProject)
-	}
-
-	homePath, err := agentDest(spec, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	suffix := filepath.Join(".pi", "agent", "skills", "wecom-calendar")
-	if !strings.HasSuffix(homePath, suffix) {
-		t.Fatalf("home dest %q does not end with %q", homePath, suffix)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+			spec, ok := agentByID(tc.id)
+			if !ok {
+				t.Fatalf("agentSpec %q missing", tc.id)
+			}
+			projectPath, err := agentDest(spec, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if projectPath != tc.wantProjectPath {
+				t.Fatalf("project dest = %q, want %q", projectPath, tc.wantProjectPath)
+			}
+			homePath, err := agentDest(spec, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.HasSuffix(homePath, tc.wantHomeSuffix) {
+				t.Fatalf("home dest %q does not end with %q", homePath, tc.wantHomeSuffix)
+			}
+		})
 	}
 }

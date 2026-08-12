@@ -1,6 +1,6 @@
 {
   "name": "@angelmsger/wecom-calendar-cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store and query them from the terminal, built for coding agents: incremental sync, event queries over a date range, and a free-form agent-owned metadata layer for classification and external task links.",
   "keywords": [
     "wecom",
