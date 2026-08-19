@@ -248,12 +248,12 @@ const htmlTemplate = `<!doctype html>
 </nav>
 <aside class="deprecated">
   <div class="deprecated-inner">
-    <span class="tag">Archived</span>
-    <div class="body">
-      <p><strong>wecom-calendar-cli is archived and deprecated.</strong> Use Tencent's official
-        <a href="https://github.com/WecomTeam/wecom-cli"><code>wecom-cli</code></a> (<code>@wecom/cli</code>)
-        instead — it is stable and covers the WeCom calendar surface (日程) through the official APIs.
-        This reference documents v0.2.2 as it shipped; there will be no further releases.</p>
+    <span class="deprecated-tag">Archived</span>
+    <div class="deprecated-body">
+      <p><strong>wecom-calendar-cli is no longer maintained.</strong> Tencent's official
+        <a class="deprecated-go" href="https://github.com/WecomTeam/wecom-cli">wecom-cli</a>
+        covers WeCom calendars (日程) through the official APIs. This reference documents
+        v0.2.2 as it shipped.</p>
     </div>
   </div>
 </aside>
