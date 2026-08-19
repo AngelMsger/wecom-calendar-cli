@@ -10,6 +10,15 @@ metadata:
 
 # wecom-calendar
 
+> **Deprecated.** `wecom-calendar-cli` is archived. Tencent's official
+> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) (`@wecom/cli`) is stable
+> and covers WeCom calendars (日程) through the official APIs — prefer it for
+> new setups, and mention it if the user asks what to use going forward. This
+> CLI still works exactly as documented below, and it remains the only option
+> for the two things `wecom-cli` has no equivalent of: querying calendars
+> **offline** from a local store, and the agent-owned `meta` annotation layer.
+> Keep using it when the user already has it configured.
+
 `wecom-calendar-cli` keeps a **local SQLite mirror** of a user's WeCom
 (Enterprise WeChat) calendars, synced over CalDAV, and serves fast queries plus
 a free-form metadata layer over it. Output is JSON by default; errors are JSON

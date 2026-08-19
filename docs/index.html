@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>wecom-calendar-cli — sync WeCom calendars locally and query them from your terminal</title>
-<meta name="description" content="A command-line tool that lets coding agents sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, query events over a date range, and maintain a free-form agent-owned metadata layer for classification and external task links.">
+<title>wecom-calendar-cli — archived, superseded by Tencent’s official wecom-cli</title>
+<meta name="description" content="Archived and deprecated: use Tencent’s official wecom-cli (@wecom/cli) instead. wecom-calendar-cli synced WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, queried events over a date range, and maintained a free-form agent-owned metadata layer.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta property="og:type" content="website">
-<meta property="og:title" content="wecom-calendar-cli — sync WeCom calendars locally and query them from your terminal">
-<meta property="og:description" content="Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, query events from it, and annotate them — built for coding agents.">
+<meta property="og:title" content="wecom-calendar-cli — archived, superseded by Tencent’s official wecom-cli">
+<meta property="og:description" content="Archived and deprecated — use Tencent’s official wecom-cli (@wecom/cli) instead. This CLI synced WeCom calendars over CalDAV into a local SQLite store, queried them, and annotated them for coding agents.">
 <meta property="og:url" content="https://angelmsger.github.io/wecom-calendar-cli/">
 <meta property="og:image" content="https://angelmsger.github.io/wecom-calendar-cli/image.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -126,6 +126,25 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 .btn-primary:hover { background: #0d52d6; border-color: #0d52d6; }
 .btn-ghost { background: var(--panel); color: var(--text); }
 .btn-ghost:hover { border-color: var(--accent); }
+/* Archival banner. Amber rather than the page's brand blue on purpose: this is
+   a status notice, not another feature panel, and it must not read as part of
+   the product it is retiring. #ffcf7a on this ground clears 9:1. */
+.deprecated { background: rgba(240, 165, 20, 0.09); border-bottom: 1px solid rgba(240, 165, 20, 0.34); }
+.deprecated-inner {
+  max-width: var(--wrap); margin: 0 auto; padding: 20px 24px;
+  display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
+}
+.deprecated .tag {
+  flex: none; margin-top: 3px; white-space: nowrap;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase; color: #ffcf7a;
+  border: 1px solid rgba(240, 165, 20, 0.45); border-radius: 999px; padding: 5px 12px;
+}
+.deprecated .body { flex: 1 1 340px; }
+.deprecated p { color: var(--muted); font-size: 0.94rem; max-width: 78ch; }
+.deprecated p + p { margin-top: 9px; }
+.deprecated strong { color: var(--text); }
+.deprecated a { color: #ffcf7a; }
 .section { padding: 92px 0; border-top: 1px solid var(--border-soft); }
 .section-head { margin-bottom: 40px; }
 .section-head h2 { font-size: 1.7rem; margin: 10px 0 8px; }
@@ -228,6 +247,25 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
     </div>
   </div>
 </nav>
+
+<aside class="deprecated">
+  <div class="deprecated-inner">
+    <span class="tag">Archived</span>
+    <div class="body">
+      <p><strong>This project is archived and deprecated.</strong> Tencent now ships an official WeCom
+        command-line tool — <a href="https://github.com/WecomTeam/wecom-cli"><code>wecom-cli</code></a>
+        (<code>@wecom/cli</code>) — which has reached a stable, usable state and covers calendars (日程)
+        alongside documents, smart sheets, messages, contacts, todos and meetings, through the official
+        WeCom APIs rather than the undocumented CalDAV backend this project reverse-engineered.
+        <strong>Use it instead.</strong></p>
+      <p>There will be no further releases or fixes here. Existing installs keep working, and the source
+        stays available under MIT. <code>wecom-cli</code> is not a drop-in replacement: it queries the API
+        live, so it has no equivalent of this project's local SQLite mirror or its agent-owned
+        <code>meta</code> annotation layer — export anything you still need from your local
+        <code>calendar.db</code> before uninstalling. Everything below documents v0.2.2 as it shipped.</p>
+    </div>
+  </div>
+</aside>
 
 <header class="hero" id="top">
   <div class="wrap">
@@ -395,7 +433,7 @@ npm install -g @angelmsger/wecom-calendar-cli</pre>
 
 <footer class="footer">
   <div class="wrap">
-    <span class="brand-foot">wecom-calendar-cli — MIT License</span>
+    <span class="brand-foot">wecom-calendar-cli — MIT License · <strong>archived</strong>, use <a href="https://github.com/WecomTeam/wecom-cli">wecom-cli</a></span>
     <span>Sister CLIs: <a href="https://angelmsger.github.io/jira-cli/">jira-cli</a> · <a href="https://angelmsger.github.io/confluence-cli/">confluence-cli</a> · <a href="https://angelmsger.github.io/bitbucket-cli/">bitbucket-cli</a> · <a href="https://angelmsger.github.io/openobserve-cli/">openobserve-cli</a> · <a href="https://github.com/AngelMsger">more →</a></span>
     <span>Developer: <a href="https://angelmsger.github.io/">AngelMsger</a> · <a href="https://github.com/AngelMsger/wecom-calendar-cli">GitHub</a></span>
   </div>

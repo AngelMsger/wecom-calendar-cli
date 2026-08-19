@@ -1,5 +1,14 @@
 # Contributing
 
+> [!IMPORTANT]
+> **This repository is archived and no longer accepting contributions.** It is
+> deprecated in favour of Tencent's official
+> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli), which is stable and
+> covers the WeCom calendar surface (日程) through the official APIs. Issues and
+> pull requests are not being triaged; please direct WeCom CLI work upstream.
+> The workflow below is kept so the code remains buildable and readable for
+> anyone reading or forking it.
+
 Thanks for working on `wecom-calendar-cli`. This guide covers the repository
 layout, the build and test workflow, and the conventions a change is expected to
 follow. For the architecture and the workspace-wide conventions this project

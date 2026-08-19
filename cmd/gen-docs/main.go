@@ -201,6 +201,12 @@ func renderExample(s string) template.HTML {
 func writeReadme(root *cobra.Command, mods []module) error {
 	var b strings.Builder
 	b.WriteString("# wecom-calendar-cli command reference\n\n")
+	b.WriteString("> [!WARNING]\n")
+	b.WriteString("> **`wecom-calendar-cli` is archived and deprecated.** Use Tencent's official\n")
+	b.WriteString("> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) (`@wecom/cli`) instead —\n")
+	b.WriteString("> it is stable and covers the WeCom calendar surface (日程) through the official\n")
+	b.WriteString("> APIs. This reference documents v0.2.2 as it shipped; there will be no further\n")
+	b.WriteString("> releases.\n\n")
 	b.WriteString("This index is generated from the CLI command tree — do not edit it by\n")
 	b.WriteString("hand; run `make docs`. The full reference, with every flag and example,\n")
 	fmt.Fprintf(&b, "is published at <%s>.\n\n", pagesURL)
@@ -221,7 +227,7 @@ const htmlTemplate = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>wecom-calendar-cli — CLI reference</title>
+<title>wecom-calendar-cli — CLI reference (archived)</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='22' rx='4' fill='%23070b16' stroke='%231464f0' stroke-width='2'/%3E%3Crect x='4' y='6' width='24' height='7' fill='%231464f0'/%3E%3Crect x='10' y='2' width='2' height='6' rx='1' fill='%231464f0'/%3E%3Crect x='20' y='2' width='2' height='6' rx='1' fill='%231464f0'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -240,6 +246,17 @@ const htmlTemplate = `<!doctype html>
     </div>
   </div>
 </nav>
+<aside class="deprecated">
+  <div class="deprecated-inner">
+    <span class="tag">Archived</span>
+    <div class="body">
+      <p><strong>wecom-calendar-cli is archived and deprecated.</strong> Use Tencent's official
+        <a href="https://github.com/WecomTeam/wecom-cli"><code>wecom-cli</code></a> (<code>@wecom/cli</code>)
+        instead — it is stable and covers the WeCom calendar surface (日程) through the official APIs.
+        This reference documents v0.2.2 as it shipped; there will be no further releases.</p>
+    </div>
+  </div>
+</aside>
 <div class="layout">
   <aside class="side">
     {{range .Modules}}<div class="side-group">

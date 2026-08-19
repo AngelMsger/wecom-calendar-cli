@@ -1,5 +1,14 @@
 # Agent Guide — wecom-calendar-cli
 
+> **Archived — deprecated in favour of Tencent's official
+> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli).** This project is no
+> longer maintained: do not add features, do not cut releases, and do not port
+> new family-wide contracts into it. The remaining acceptable changes are
+> documentation corrections and the archival notices themselves. Anyone asking
+> for WeCom calendar tooling should be pointed at `@wecom/cli`, which covers
+> 日程 through the official WeCom APIs. The rest of this guide is retained so
+> the code stays readable.
+
 This project is a member of the `oa-cli` agent-facing CLI family and mirrors its
 siblings (`jira-cli`, `confluence-cli`, …). Read the workspace guide
 (`../../AGENTS.md`) and the shared standards under `../../docs/` first. Port the
@@ -80,11 +89,23 @@ make cross        # cross-compile dist/ for all platforms
 Go 1.25 (`go.mod`), `CGO_ENABLED=0` (pure-Go SQLite via modernc.org/sqlite).
 Version is injected via ldflags into `pkg/constants`.
 
-## Status
+## Status — archived
 
-Feature-complete against the family Definition of Done: config/auth/doctor,
-sync (incremental + idempotent, ctag + etag), recurrence expansion into
-`event_instances` with cross-calendar dedup (`internal/expand`), the
-agent-owned metadata layer, companion Skill, generated CLI docs, update-notice,
-CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on Linux + Windows runtime),
-and npm distribution. All of it verified against the live WeCom server.
+**Archived as of 2026-08-19. Superseded by
+[`wecom-cli`](https://github.com/WecomTeam/wecom-cli), Tencent's official WeCom
+CLI, which became stable and usable and covers the calendar surface (日程)
+through the official APIs.** No further releases, fixes, or family alignment
+work. The last release is v0.2.2 (2026-08-12); published binaries and the npm
+package stay available so existing installs keep working.
+
+The two capabilities that have no equivalent in `wecom-cli` — the local SQLite
+mirror (offline, incremental querying) and the agent-owned `event_metadata`
+layer — are why the code is kept readable here rather than deleted.
+
+At the point of archival the project was feature-complete against the family
+Definition of Done: config/auth/doctor, sync (incremental + idempotent, ctag +
+etag), recurrence expansion into `event_instances` with cross-calendar dedup
+(`internal/expand`), the agent-owned metadata layer, companion Skill, generated
+CLI docs, update-notice, CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on
+Linux + Windows runtime), and npm distribution. All of it was verified against
+the live WeCom server.

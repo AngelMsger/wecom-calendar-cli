@@ -1,5 +1,14 @@
 # Releasing (maintainer guide)
 
+> [!IMPORTANT]
+> **Archived — no further releases are planned.** This project is deprecated in
+> favour of Tencent's official [`wecom-cli`](https://github.com/WecomTeam/wecom-cli);
+> v0.2.2 (2026-08-12) is the last release. The existing GitHub Releases, the
+> `@angelmsger/wecom-calendar-cli` npm package, and the Pages site stay up so
+> current installs keep working — do not unpublish or take the repository
+> private. The procedure below is retained in case a security fix ever has to
+> ship.
+
 `wecom-calendar-cli` is distributed from **GitHub Releases**. Everything else —
 the npm package, `go install`, the `doctor` update check — points back to the
 release assets, so a release is the single source of truth.

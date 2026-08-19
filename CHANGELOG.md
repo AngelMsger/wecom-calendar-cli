@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+
+- **Project archived — use Tencent's official
+  [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) instead.** `@wecom/cli`
+  has reached a stable, usable state and covers the calendar surface (日程)
+  through the official WeCom APIs, so this reverse-engineered CalDAV client is
+  no longer worth maintaining. There will be no further releases or fixes;
+  v0.2.2 is the last one. Published binaries and the
+  `@angelmsger/wecom-calendar-cli` npm package stay available, so existing
+  installs keep working, and the source remains under MIT for reference.
+  `wecom-cli` is not a drop-in replacement: it queries the WeCom API live and
+  has no equivalent of the local SQLite mirror or the agent-owned `meta`
+  annotation layer, so export anything you need from
+  `<config_dir>/calendar.db` before uninstalling.
+
 ## [0.2.2] - 2026-08-12
 
 ### Added

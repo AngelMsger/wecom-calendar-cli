@@ -58,6 +58,26 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 .nav-links a:hover, .nav-links a.is-cli { color: var(--accent-text); text-decoration: none; }
 
 /* two-column layout: sticky sidebar + content */
+/* Archival banner — kept in sync with the same block in docs/index.html. Amber
+   rather than the page's brand blue on purpose: this is a status notice, not
+   another content panel, and it must not read as part of the product it is
+   retiring. */
+.deprecated { background: rgba(240, 165, 20, 0.09); border-bottom: 1px solid rgba(240, 165, 20, 0.34); }
+.deprecated-inner {
+  max-width: var(--wrap); margin: 0 auto; padding: 20px 24px;
+  display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
+}
+.deprecated .tag {
+  flex: none; margin-top: 3px; white-space: nowrap;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase; color: #ffcf7a;
+  border: 1px solid rgba(240, 165, 20, 0.45); border-radius: 999px; padding: 5px 12px;
+}
+.deprecated .body { flex: 1 1 340px; }
+.deprecated p { color: var(--muted); font-size: 0.94rem; max-width: 78ch; margin: 0; }
+.deprecated strong { color: var(--text); }
+.deprecated a { color: #ffcf7a; }
+
 .layout {
   max-width: var(--wrap); margin: 0 auto; padding: 32px 24px 64px;
   display: grid; grid-template-columns: 220px 1fr; gap: 40px; align-items: start;

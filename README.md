@@ -5,6 +5,39 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/angelmsger/wecom-calendar-cli.svg)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-online-success.svg)](https://angelmsger.github.io/wecom-calendar-cli/)
+[![Status: archived](https://img.shields.io/badge/status-archived-lightgrey.svg)](https://github.com/WecomTeam/wecom-cli)
+
+> [!WARNING]
+> **This repository is archived and deprecated. Use Tencent's official
+> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) instead.**
+>
+> Tencent now ships an official WeCom command-line tool,
+> [`@wecom/cli`](https://github.com/WecomTeam/wecom-cli), and it has reached a
+> stable, usable state. It covers calendars (日程) — create, read, update,
+> delete, attendee management and multi-member free/busy — alongside documents,
+> smart sheets, messages, contacts, todos and meetings, and it does so through
+> the official WeCom APIs rather than the undocumented CalDAV backend this
+> project reverse-engineered.
+>
+> **What "archived" means here.** No further releases, fixes, or support. The
+> published binaries and the `@angelmsger/wecom-calendar-cli` npm package stay
+> up, existing installs keep working, and the source remains available under
+> MIT for reference.
+>
+> **Migrating.** Install the official CLI and follow its README:
+>
+> ```bash
+> npm install -g @wecom/cli
+> ```
+>
+> It is not a drop-in replacement. `wecom-cli` queries the WeCom API live, so
+> the two things unique to this project have no equivalent there: the **local
+> SQLite mirror** (offline, incremental querying) and the **agent-owned `meta`
+> annotation layer**. If you depend on either, export what you need from
+> `<config_dir>/calendar.db` before uninstalling — nothing is removed for you.
+>
+> Everything below documents the CLI as it was last released (v0.2.2) and is
+> kept for existing users.
 
 > Sync your WeCom calendars into a local store and query them from your terminal — built for coding agents.
 
@@ -200,7 +233,7 @@ built for coding agents. Browse the full set at
 - **[bitbucket-cli](https://github.com/AngelMsger/bitbucket-cli)** — Bitbucket pull requests & code review
 - **[openobserve-cli](https://github.com/AngelMsger/openobserve-cli)** — OpenObserve logs, metrics & traces
 - **[jenkins-cli](https://github.com/AngelMsger/jenkins-cli)** — inspect Jenkins jobs & builds
-- **wecom-calendar-cli** — WeCom calendars, synced locally & annotated *(this project)*
+- **wecom-calendar-cli** — WeCom calendars, synced locally & annotated *(this project — **archived**, superseded by [`wecom-cli`](https://github.com/WecomTeam/wecom-cli))*
 
 ## License
 
