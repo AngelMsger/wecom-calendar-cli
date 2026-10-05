@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-05
+
+### Added
+
+- **Broader skill install agent matrix.** `skill install` now treats Cursor,
+  the shared Agents tree, Gemini CLI, GitHub Copilot, OpenCode, Continue,
+  Windsurf, Kilo Code, and Roo Code as first-class targets alongside Claude
+  Code, Codex, Grok Build, and Pi (13 agents total). Auto-detection probes
+  each product's home and project markers; `--agent` accepts the full id
+  list. Installation guides, generated CLI docs, and help text stay in sync.
+
 ### Changed
 
 - **Active maintenance resumed.** The project was archived on 2026-08-19, when
@@ -20,17 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation and the companion Skill explain when to use which tool.** The
   README and landing page compare the two CLIs, and the Skill routes history,
   offline and annotation requests here and calendar changes to `wecom-cli`.
-
-## [0.2.2] - 2026-08-12
-
-### Added
-
-- **Broader skill install agent matrix.** `skill install` now treats Cursor,
-  the shared Agents tree, Gemini CLI, GitHub Copilot, OpenCode, Continue,
-  Windsurf, Kilo Code, and Roo Code as first-class targets alongside Claude
-  Code, Codex, Grok Build, and Pi (13 agents total). Auto-detection probes
-  each product's home and project markers; `--agent` accepts the full id
-  list. Installation guides, generated CLI docs, and help text stay in sync.
 
 
 ## [0.2.1] - 2026-08-11
