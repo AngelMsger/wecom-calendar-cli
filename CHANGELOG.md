@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.2] - 2026-10-05
+## [0.2.3] - 2026-10-05
+
+Version 0.2.2 was prepared on 2026-08-12 but never published; the addition
+below was written for it and ships here for the first time.
 
 ### Added
 
@@ -190,8 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CI on Linux. Live end-to-end behavior against the real WeCom server is
   verified manually.
 
-[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.2.2...HEAD
-[0.2.2]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.2.1...v0.2.2
+[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.2.1...v0.2.3
 [0.2.1]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AngelMsger/wecom-calendar-cli/releases/tag/v0.1.0
