@@ -1,12 +1,5 @@
 # wecom-calendar-cli command reference
 
-> [!WARNING]
-> **`wecom-calendar-cli` is archived and deprecated.** Use Tencent's official
-> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) (`@wecom/cli`) instead —
-> it is stable and covers the WeCom calendar surface (日程) through the official
-> APIs. This reference documents v0.2.2 as it shipped; there will be no further
-> releases.
-
 This index is generated from the CLI command tree — do not edit it by
 hand; run `make docs`. The full reference, with every flag and example,
 is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.

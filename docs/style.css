@@ -58,47 +58,6 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 .nav-links a:hover, .nav-links a.is-cli { color: var(--accent-text); text-decoration: none; }
 
 /* two-column layout: sticky sidebar + content */
-/* Archival notice. Deliberately desaturated rather than an amber alert bar:
-   "archived" is a past-tense state, not a hazard, so the strip sits in the
-   page's own neutrals and the single saturated element is the forward link to
-   the project that replaces this one. The consequences for existing users fold
-   into a <details> so the notice stays one line at rest. */
-.deprecated { background: var(--bg-soft); border-bottom: 1px solid var(--border-soft); }
-.deprecated-inner {
-  max-width: var(--wrap); margin: 0 auto; padding: 16px 24px;
-  display: flex; gap: 14px; align-items: flex-start;
-}
-.deprecated-tag {
-  flex: none; margin-top: 1px;
-  font-family: var(--mono); font-size: 0.66rem; font-weight: 600;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint);
-  border: 1px solid var(--border); border-radius: 5px; padding: 4px 9px;
-}
-.deprecated-body { flex: 1 1 auto; min-width: 0; }
-.deprecated p { color: var(--muted); font-size: 0.95rem; max-width: 78ch; margin: 0; }
-.deprecated strong { color: var(--text); font-weight: 600; }
-.deprecated-go { color: var(--accent-text); font-weight: 600; white-space: nowrap; }
-.deprecated-go::after { content: " \2192"; }
-.deprecated details { margin-top: 9px; }
-.deprecated summary {
-  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
-  font-family: var(--mono); font-size: 0.76rem; color: var(--faint);
-  list-style: none;
-}
-.deprecated summary::-webkit-details-marker { display: none; }
-.deprecated summary::before {
-  content: "+"; display: inline-block; width: 1ch; text-align: center;
-  font-weight: 600; color: var(--border);
-}
-.deprecated details[open] summary::before { content: "\2212"; }
-.deprecated summary:hover, .deprecated details[open] summary { color: var(--muted); }
-.deprecated summary:hover::before { color: var(--accent-text); }
-.deprecated details p { margin-top: 9px; font-size: 0.9rem; }
-@media (max-width: 560px) {
-  .deprecated-inner { flex-direction: column; gap: 10px; padding: 14px 24px; }
-  .deprecated-tag { align-self: flex-start; margin-top: 0; }
-}
-
 .layout {
   max-width: var(--wrap); margin: 0 auto; padding: 32px 24px 64px;
   display: grid; grid-template-columns: 220px 1fr; gap: 40px; align-items: start;

@@ -7,20 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Deprecated
+### Changed
 
-- **Project archived — use Tencent's official
-  [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) instead.** `@wecom/cli`
-  has reached a stable, usable state and covers the calendar surface (日程)
-  through the official WeCom APIs, so this reverse-engineered CalDAV client is
-  no longer worth maintaining. There will be no further releases or fixes;
-  v0.2.2 is the last one. Published binaries and the
-  `@angelmsger/wecom-calendar-cli` npm package stay available, so existing
-  installs keep working, and the source remains under MIT for reference.
-  `wecom-cli` is not a drop-in replacement: it queries the WeCom API live and
-  has no equivalent of the local SQLite mirror or the agent-owned `meta`
-  annotation layer, so export anything you need from
-  `<config_dir>/calendar.db` before uninstalling.
+- **Active maintenance resumed.** The project was archived on 2026-08-19, when
+  Tencent's official [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) looked
+  like a complete replacement, and reinstated on 2026-10-05. As of version
+  1.3.2 the official CLI lists schedules only within 30 days before or after
+  today, while this CLI mirrors the whole calendar history over CalDAV and
+  queries it offline. The two are documented as complements — `wecom-cli` to
+  create and change events, this CLI to read at depth and annotate. No release
+  shipped while the project was archived, so existing installs are unaffected.
+- **Documentation and the companion Skill explain when to use which tool.** The
+  README and landing page compare the two CLIs, and the Skill routes history,
+  offline and annotation requests here and calendar changes to `wecom-cli`.
 
 ## [0.2.2] - 2026-08-12
 

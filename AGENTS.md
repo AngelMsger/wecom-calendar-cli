@@ -1,14 +1,5 @@
 # Agent Guide — wecom-calendar-cli
 
-> **Archived — deprecated in favour of Tencent's official
-> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli).** This project is no
-> longer maintained: do not add features, do not cut releases, and do not port
-> new family-wide contracts into it. The remaining acceptable changes are
-> documentation corrections and the archival notices themselves. Anyone asking
-> for WeCom calendar tooling should be pointed at `@wecom/cli`, which covers
-> 日程 through the official WeCom APIs. The rest of this guide is retained so
-> the code stays readable.
-
 This project is a member of the `oa-cli` agent-facing CLI family and mirrors its
 siblings (`jira-cli`, `confluence-cli`, …). Read the workspace guide
 (`../../AGENTS.md`) and the shared standards under `../../docs/` first. Port the
@@ -19,6 +10,32 @@ established shape; do not reinvent cross-cutting contracts.
 Sync a user's WeCom (Enterprise WeChat) calendars over CalDAV into a local
 SQLite store, then serve fast agent-friendly queries over that data, plus a
 free-form metadata layer for agent-maintained annotations.
+
+## Relationship to the official wecom-cli
+
+Tencent's official [`wecom-cli`](https://github.com/WecomTeam/wecom-cli)
+(`@wecom/cli`) also covers calendars. The two tools are complements, and that
+division shapes what belongs here:
+
+- **This CLI owns reading at depth.** CalDAV has no date-range limit, whereas
+  the official CLI lists schedules only in a short window around today. Full
+  history, offline queries, recurrence expansion and the agent-owned metadata
+  layer are the reason this project exists; protect them first.
+- **The official CLI owns acting on the calendar.** Creating, updating and
+  cancelling events, attendee management and free/busy lookup are done there.
+  Do not add calendar writes here: this CLI stays read-only towards WeCom, and
+  its only writes are local metadata.
+- **Keep the comparison current.** The figures live in three user-facing
+  places: the README (its introduction and the section "Alongside the official
+  wecom-cli"), the landing page (`docs/index.html`), and the companion Skill.
+  Each carries the same "Checked against wecom-cli <version> on <date>" line.
+  Re-verify and update all three together when the official limits change;
+  other documents link to the README instead of repeating the figures.
+
+The project was archived from 2026-08-19 to 2026-10-05 on the assumption that
+the official CLI replaced it, and reinstated once daily use exposed the history
+limit. Overlap with the official CLI is therefore not, by itself, a reason to
+stop maintaining this one.
 
 ## Documented domain divergence — a local store
 
@@ -89,23 +106,22 @@ make cross        # cross-compile dist/ for all platforms
 Go 1.25 (`go.mod`), `CGO_ENABLED=0` (pure-Go SQLite via modernc.org/sqlite).
 Version is injected via ldflags into `pkg/constants`.
 
-## Status — archived
+## Status
 
-**Archived as of 2026-08-19. Superseded by
-[`wecom-cli`](https://github.com/WecomTeam/wecom-cli), Tencent's official WeCom
-CLI, which became stable and usable and covers the calendar surface (日程)
-through the official APIs.** No further releases, fixes, or family alignment
-work. The last release is v0.2.2 (2026-08-12); published binaries and the npm
-package stay available so existing installs keep working.
+Actively maintained.
 
-The two capabilities that have no equivalent in `wecom-cli` — the local SQLite
-mirror (offline, incremental querying) and the agent-owned `event_metadata`
-layer — are why the code is kept readable here rather than deleted.
+Implemented and verified against the live WeCom server: config/auth/doctor,
+sync (incremental + idempotent, ctag + etag), recurrence expansion into
+`event_instances` with cross-calendar dedup (`internal/expand`), the
+agent-owned metadata layer, companion Skill, generated CLI docs, update-notice,
+CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on Linux + Windows
+runtime), and npm distribution.
 
-At the point of archival the project was feature-complete against the family
-Definition of Done: config/auth/doctor, sync (incremental + idempotent, ctag +
-etag), recurrence expansion into `event_instances` with cross-calendar dedup
-(`internal/expand`), the agent-owned metadata layer, companion Skill, generated
-CLI docs, update-notice, CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on
-Linux + Windows runtime), and npm distribution. All of it was verified against
-the live WeCom server.
+**Alignment backlog.** The family adopted several shared contracts while this
+project was archived, and none of them has been checked or ported here yet: the
+event and history filter contract, the Skill collaboration and write-recovery
+rules, the CLI and Skill upgrade loop, team service presets with personal
+login, and NDJSON continuation metadata. Treat each as applicable and not yet
+ported until it is ported or recorded as an intentional difference, then remove
+it from this list. The rule on replying to human-authored comments, adopted in
+the same period, has nothing to apply to: this CLI has no comment surface.

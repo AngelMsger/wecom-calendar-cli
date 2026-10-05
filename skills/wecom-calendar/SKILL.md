@@ -1,7 +1,7 @@
 ---
 name: wecom-calendar
-version: 0.1.0
-description: "Sync a user's WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query events and calendars from it and maintain a free-form, agent-owned metadata layer (event classification, external task links). Use this skill when the user mentions a WeCom / 企业微信 calendar, schedule or 日程; asks to sync a calendar, refresh calendar data, list calendars, query or find events in a date range, see calendar events, or read one event's full detail — description, location, organizer and attendees; or wants to annotate, classify or tag an event, link an event to a task (e.g. a Feishu project item), or read those annotations. Queries read the local store, so run `sync` first and re-sync whenever a read prints a `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor a session read-only posture (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only, overridable with --allow-writes) and every write also accepts --dry-run to preview before applying."
+version: 0.1.1
+description: "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query it and maintain an agent-owned metadata layer (event classification, external task links). Use when the user mentions a WeCom / 企业微信 calendar, schedule or 日程 and asks to sync or refresh calendar data, list calendars, see or find events in a date range — including history more than 30 days from today, which the official wecom-cli cannot list — read one event's full detail (description, location, organizer, attendees), or annotate, classify, tag or link an event to a task (e.g. a Feishu project item) and read those annotations. It never changes the calendar; creating, editing or cancelling events belongs to wecom-cli. Queries read the local store, so run `sync` first and re-sync when a read prints `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor read-only mode (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only; --allow-writes overrides) and accept --dry-run."
 metadata:
   requires:
     bins: ["wecom-calendar-cli"]
@@ -10,19 +10,37 @@ metadata:
 
 # wecom-calendar
 
-> **Deprecated.** `wecom-calendar-cli` is archived. Tencent's official
-> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) (`@wecom/cli`) is stable
-> and covers WeCom calendars (日程) through the official APIs — prefer it for
-> new setups, and mention it if the user asks what to use going forward. This
-> CLI still works exactly as documented below, and it remains the only option
-> for the two things `wecom-cli` has no equivalent of: querying calendars
-> **offline** from a local store, and the agent-owned `meta` annotation layer.
-> Keep using it when the user already has it configured.
-
 `wecom-calendar-cli` keeps a **local SQLite mirror** of a user's WeCom
 (Enterprise WeChat) calendars, synced over CalDAV, and serves fast queries plus
 a free-form metadata layer over it. Output is JSON by default; errors are JSON
 on stderr with a `category`, a `code`, a `hint` and `next_steps`.
+
+## This CLI or the official `wecom-cli`
+
+Tencent's official `wecom-cli` (`@wecom/cli`) also reads WeCom calendars, and
+the user may have both installed. They are complements — route by the request:
+
+- **Use this CLI** when the window reaches more than 30 days before or after
+  today, when the user wants offline or repeated queries, and for annotations
+  (`meta`). `wecom-cli` cannot list schedules outside that range, even for
+  events the user can see in the WeCom client; CalDAV has no such limit. Pass
+  `--since`/`--until` explicitly, because `event list` itself defaults to 30
+  days either side of today. For recurring events more than two years back or
+  one year ahead, widen coverage first with
+  `expand --since <date> --until <date>` (see
+  [querying.md](references/querying.md)).
+- **Use `wecom-cli`** to change the calendar: create, update or cancel an
+  event, manage attendees, or find when several members are free. This CLI is
+  read-only towards WeCom and has no command for any of that — say so and hand
+  off rather than improvising.
+- **Either works** for a read inside that range. Prefer this CLI when its store
+  is already synced: the answer comes with recurring events expanded and
+  annotations attached.
+
+An empty, truncated or rejected result from `wecom-cli` for a window outside
+that range is its limit, not missing data — sync and query here instead.
+
+Checked against wecom-cli 1.3.2 on 2026-10-05.
 
 ## Golden rule — sync first, then read the store
 
@@ -78,6 +96,8 @@ wecom-calendar-cli event list --since YYYY-MM-DD --until YYYY-MM-DD \
                                        # events from the store, in a window
 wecom-calendar-cli event get <uid> [--occurrence key] [--include-meta]
                                        # one event in full: description, organizer, attendees(is_self)
+wecom-calendar-cli expand [--since YYYY-MM-DD] [--until YYYY-MM-DD]
+                                       # rebuild recurring occurrences; flags widen and pin the window
 wecom-calendar-cli whoami              # the configured account (your identity)
 wecom-calendar-cli meta set <uid> <ns> <key> <value> [--source s] [--dry-run]
 wecom-calendar-cli meta get <uid> [ns] [key]        # read annotations

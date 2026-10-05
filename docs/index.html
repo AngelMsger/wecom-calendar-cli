@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>wecom-calendar-cli — archived, superseded by Tencent’s official wecom-cli</title>
-<meta name="description" content="Archived and deprecated: use Tencent’s official wecom-cli (@wecom/cli) instead. wecom-calendar-cli synced WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, queried events over a date range, and maintained a free-form agent-owned metadata layer.">
+<title>wecom-calendar-cli — sync WeCom calendars locally and query them from your terminal</title>
+<meta name="description" content="A command-line tool that lets coding agents sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, query events years back as easily as next week, and maintain a free-form agent-owned metadata layer for classification and external task links.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta property="og:type" content="website">
-<meta property="og:title" content="wecom-calendar-cli — archived, superseded by Tencent’s official wecom-cli">
-<meta property="og:description" content="Archived and deprecated — use Tencent’s official wecom-cli (@wecom/cli) instead. This CLI synced WeCom calendars over CalDAV into a local SQLite store, queried them, and annotated them for coding agents.">
+<meta property="og:title" content="wecom-calendar-cli — sync WeCom calendars locally and query them from your terminal">
+<meta property="og:description" content="Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, query events from it, and annotate them — built for coding agents.">
 <meta property="og:url" content="https://angelmsger.github.io/wecom-calendar-cli/">
 <meta property="og:image" content="https://angelmsger.github.io/wecom-calendar-cli/image.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -126,46 +126,20 @@ h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -0.01em
 .btn-primary:hover { background: #0d52d6; border-color: #0d52d6; }
 .btn-ghost { background: var(--panel); color: var(--text); }
 .btn-ghost:hover { border-color: var(--accent); }
-/* Archival notice. Deliberately desaturated rather than an amber alert bar:
-   "archived" is a past-tense state, not a hazard, so the strip sits in the
-   page's own neutrals and the single saturated element is the forward link to
-   the project that replaces this one. The consequences for existing users fold
-   into a <details> so the notice stays one line at rest. */
-.deprecated { background: var(--bg-soft); border-bottom: 1px solid var(--border-soft); }
-.deprecated-inner {
-  max-width: var(--wrap); margin: 0 auto; padding: 16px 24px;
-  display: flex; gap: 14px; align-items: flex-start;
+/* Side by side with the official wecom-cli. Both cards carry the same four
+   labelled rows so the eye compares across them; the grid stacks them on a
+   narrow screen, where the labels keep each row identifiable on its own. */
+.versus .role { font-family: var(--mono); font-size: 0.74rem; color: var(--accent-text); }
+.versus h3 { margin-top: 4px; }
+.versus dl { display: grid; gap: 13px; margin-top: 16px; }
+.versus dt {
+  font-family: var(--mono); font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint);
 }
-.deprecated-tag {
-  flex: none; margin-top: 1px;
-  font-family: var(--mono); font-size: 0.66rem; font-weight: 600;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint);
-  border: 1px solid var(--border); border-radius: 5px; padding: 4px 9px;
-}
-.deprecated-body { flex: 1 1 auto; min-width: 0; }
-.deprecated p { color: var(--muted); font-size: 0.95rem; max-width: 78ch; margin: 0; }
-.deprecated strong { color: var(--text); font-weight: 600; }
-.deprecated-go { color: var(--accent-text); font-weight: 600; white-space: nowrap; }
-.deprecated-go::after { content: " \2192"; }
-.deprecated details { margin-top: 9px; }
-.deprecated summary {
-  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
-  font-family: var(--mono); font-size: 0.76rem; color: var(--faint);
-  list-style: none;
-}
-.deprecated summary::-webkit-details-marker { display: none; }
-.deprecated summary::before {
-  content: "+"; display: inline-block; width: 1ch; text-align: center;
-  font-weight: 600; color: var(--border);
-}
-.deprecated details[open] summary::before { content: "\2212"; }
-.deprecated summary:hover, .deprecated details[open] summary { color: var(--muted); }
-.deprecated summary:hover::before { color: var(--accent-text); }
-.deprecated details p { margin-top: 9px; font-size: 0.9rem; }
-@media (max-width: 560px) {
-  .deprecated-inner { flex-direction: column; gap: 10px; padding: 14px 24px; }
-  .deprecated-tag { align-self: flex-start; margin-top: 0; }
-}
+.versus dd { color: var(--muted); font-size: 0.92rem; margin-top: 2px; }
+.versus dd strong { color: var(--text); font-weight: 600; }
+.versus-note { margin-top: 24px; color: var(--muted); max-width: 78ch; }
+.versus-note + .versus-note { margin-top: 12px; font-size: 0.9rem; color: var(--faint); }
 .section { padding: 92px 0; border-top: 1px solid var(--border-soft); }
 .section-head { margin-bottom: 40px; }
 .section-head h2 { font-size: 1.7rem; margin: 10px 0 8px; }
@@ -208,7 +182,7 @@ pre {
 .term pre { border: 0; border-radius: 0; }
 pre .c { color: var(--faint); }
 pre .p { color: var(--accent-text); }
-p code, li code, td code {
+p code, li code, td code, dd code {
   font-size: 0.86em; background: var(--accent-soft);
   border: 1px solid var(--border-soft); border-radius: 5px; padding: 1px 6px;
   color: #a8c8ff;
@@ -260,6 +234,7 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
     <a class="brand" href="#top">wecom-calendar-cli</a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#official">Compare</a>
       <a href="#install">Install</a>
       <a href="#quickstart">Quick start</a>
       <a href="#commands">Commands</a>
@@ -268,27 +243,6 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
     </div>
   </div>
 </nav>
-
-<aside class="deprecated">
-  <div class="deprecated-inner">
-    <span class="deprecated-tag">Archived</span>
-    <div class="deprecated-body">
-      <p><strong>This project is no longer maintained.</strong> Tencent's official
-        <a class="deprecated-go" href="https://github.com/WecomTeam/wecom-cli">wecom-cli</a>
-        covers WeCom calendars (日程) through the official APIs. Use it instead.</p>
-      <details>
-        <summary>What this means if you already use it</summary>
-        <p>v0.2.2 is the last release; there will be no further fixes. Existing installs keep
-          working — the releases, the npm package and this site stay up, and the source stays
-          available under MIT. <code>wecom-cli</code> is not a drop-in replacement: it queries
-          the API live, so it has no equivalent of this project's local SQLite mirror or its
-          agent-owned <code>meta</code> annotation layer. Export anything you still need from
-          your local <code>calendar.db</code> before uninstalling. Everything below documents
-          v0.2.2 as it shipped.</p>
-      </details>
-    </div>
-  </div>
-</aside>
 
 <header class="hero" id="top">
   <div class="wrap">
@@ -300,9 +254,9 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
       <span class="pill">Built for agents</span>
     </div>
     <div class="cta reveal d4">
-      <a class="btn btn-primary" href="https://github.com/WecomTeam/wecom-cli">Use wecom-cli instead →</a>
-      <a class="btn btn-ghost" href="#install">Install v0.2.2</a>
+      <a class="btn btn-primary" href="#install">Get started</a>
       <a class="btn btn-ghost" href="cli/">Browse the CLI reference →</a>
+      <a class="btn btn-ghost" href="https://github.com/AngelMsger/wecom-calendar-cli">GitHub</a>
     </div>
     <div class="shot reveal d5">
       <img src="image.png" width="1693" height="929"
@@ -353,6 +307,40 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
   </div>
 </section>
 
+<section class="section" id="official">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Side by side</span>
+      <h2>Full history, alongside the official CLI</h2>
+      <p class="lead">Tencent's official <a href="https://github.com/WecomTeam/wecom-cli">wecom-cli</a> lists events only within 30 days before or after today. This CLI syncs over CalDAV — the endpoint WeCom provides for other calendar apps — which has no such limit. The two are built for different jobs and work best installed side by side.</p>
+    </div>
+    <div class="grid grid-2 versus">
+      <div class="card">
+        <span class="role">Read at depth</span>
+        <h3>wecom-calendar-cli</h3>
+        <dl>
+          <div><dt>Date range</dt><dd><strong>Your whole calendar</strong> — every event CalDAV serves, from 2000 through two years ahead.</dd></div>
+          <div><dt>Queries run</dt><dd>Against a local SQLite mirror: offline and fast, as fresh as the last <code>sync</code>.</dd></div>
+          <div><dt>Changes to your calendar</dt><dd>None. It is read-only towards WeCom; the only writes are your own local annotations.</dd></div>
+          <div><dt>Covers</dt><dd>Calendars only, with recurring events expanded and an agent-owned <code>meta</code> layer.</dd></div>
+        </dl>
+      </div>
+      <div class="card">
+        <span class="role">Act on the calendar</span>
+        <h3>wecom-cli, by Tencent</h3>
+        <dl>
+          <div><dt>Date range</dt><dd><strong>30 days before or after today.</strong> Events outside that range stay visible in the WeCom client; <code>wecom-cli</code> does not list them.</dd></div>
+          <div><dt>Queries run</dt><dd>Live against WeCom's official service on every call.</dd></div>
+          <div><dt>Changes to your calendar</dt><dd>Create, update and cancel events, manage attendees, and look up when several members are free.</dd></div>
+          <div><dt>Covers</dt><dd>Calendars, plus the rest of WeCom: messages, email, documents, todos, meetings and more.</dd></div>
+        </dl>
+      </div>
+    </div>
+    <p class="versus-note">Reach for <code>wecom-cli</code> to book, move or cancel something, or to work with the rest of WeCom. Reach for <code>wecom-calendar-cli</code> to look back, to query without a network round trip, and to classify events or link them to tasks in a layer that outlives every refresh.</p>
+    <p class="versus-note">Recurring events are expanded from two years back to one year ahead by default; <code>expand</code> widens that. Checked against wecom-cli 1.3.2 on 2026-10-05.</p>
+  </div>
+</section>
+
 <section class="section" id="install">
   <div class="wrap">
     <div class="section-head">
@@ -371,7 +359,7 @@ npm install -g @angelmsger/wecom-calendar-cli</pre>
     <div class="grid grid-2" style="margin-top:14px">
       <div class="card">
         <h3>1 · Companion Skill</h3>
-        <p style="margin:6px 0 12px">A <code>wecom-calendar</code> Skill is embedded in the binary. It detects your coding agent — Claude Code, Codex — and installs for each:</p>
+        <p style="margin:6px 0 12px">A <code>wecom-calendar</code> Skill is embedded in the binary. It detects your coding agents — Claude Code, Codex, Cursor and ten more — and installs for each one found:</p>
         <div class="term"><div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
 <pre><span class="p">$</span> wecom-calendar-cli skill install</pre></div>
       </div>
@@ -456,8 +444,8 @@ npm install -g @angelmsger/wecom-calendar-cli</pre>
 
 <footer class="footer">
   <div class="wrap">
-    <span class="brand-foot">wecom-calendar-cli — MIT License · <strong>archived</strong>, use <a href="https://github.com/WecomTeam/wecom-cli">wecom-cli</a></span>
-    <span>Sister CLIs: <a href="https://angelmsger.github.io/jira-cli/">jira-cli</a> · <a href="https://angelmsger.github.io/confluence-cli/">confluence-cli</a> · <a href="https://angelmsger.github.io/bitbucket-cli/">bitbucket-cli</a> · <a href="https://angelmsger.github.io/openobserve-cli/">openobserve-cli</a> · <a href="https://github.com/AngelMsger">more →</a></span>
+    <span class="brand-foot">wecom-calendar-cli — MIT License</span>
+    <span>Sister CLIs: <a href="https://angelmsger.github.io/jira-cli/">jira-cli</a> · <a href="https://angelmsger.github.io/confluence-cli/">confluence-cli</a> · <a href="https://angelmsger.github.io/bitbucket-cli/">bitbucket-cli</a> · <a href="https://angelmsger.github.io/openobserve-cli/">openobserve-cli</a> · <a href="https://angelmsger.github.io/jenkins-cli/">jenkins-cli</a> · <a href="https://angelmsger.github.io/prometheus-cli/">prometheus-cli</a> · <a href="https://github.com/AngelMsger">more →</a></span>
     <span>Developer: <a href="https://angelmsger.github.io/">AngelMsger</a> · <a href="https://github.com/AngelMsger/wecom-calendar-cli">GitHub</a></span>
   </div>
 </footer>

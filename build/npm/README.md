@@ -7,6 +7,12 @@ CalDAV into a local SQLite store, then serves fast event queries and a
 free-form, agent-owned metadata layer (classification, external task links).
 Built for coding agents (Claude Code and others) and humans alike.
 
+It complements Tencent's official
+[`wecom-cli`](https://github.com/WecomTeam/wecom-cli): use that to create and
+change events, and this to read your whole calendar history offline. The
+[project README](https://github.com/AngelMsger/wecom-calendar-cli#alongside-the-official-wecom-cli)
+compares the two.
+
 ```bash
 npm install -g @angelmsger/wecom-calendar-cli
 wecom-calendar-cli config init       # CalDAV server URL + WeCom email + app password

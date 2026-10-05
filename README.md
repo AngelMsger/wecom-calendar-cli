@@ -5,39 +5,6 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/angelmsger/wecom-calendar-cli.svg)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-online-success.svg)](https://angelmsger.github.io/wecom-calendar-cli/)
-[![Status: archived](https://img.shields.io/badge/status-archived-lightgrey.svg)](https://github.com/WecomTeam/wecom-cli)
-
-> [!WARNING]
-> **This repository is archived and deprecated. Use Tencent's official
-> [`wecom-cli`](https://github.com/WecomTeam/wecom-cli) instead.**
->
-> Tencent now ships an official WeCom command-line tool,
-> [`@wecom/cli`](https://github.com/WecomTeam/wecom-cli), and it has reached a
-> stable, usable state. It covers calendars (日程) — create, read, update,
-> delete, attendee management and multi-member free/busy — alongside documents,
-> smart sheets, messages, contacts, todos and meetings, and it does so through
-> the official WeCom APIs rather than the undocumented CalDAV backend this
-> project reverse-engineered.
->
-> **What "archived" means here.** No further releases, fixes, or support. The
-> published binaries and the `@angelmsger/wecom-calendar-cli` npm package stay
-> up, existing installs keep working, and the source remains available under
-> MIT for reference.
->
-> **Migrating.** Install the official CLI and follow its README:
->
-> ```bash
-> npm install -g @wecom/cli
-> ```
->
-> It is not a drop-in replacement. `wecom-cli` queries the WeCom API live, so
-> the two things unique to this project have no equivalent there: the **local
-> SQLite mirror** (offline, incremental querying) and the **agent-owned `meta`
-> annotation layer**. If you depend on either, export what you need from
-> `<config_dir>/calendar.db` before uninstalling — nothing is removed for you.
->
-> Everything below documents the CLI as it was last released (v0.2.2) and is
-> kept for existing users.
 
 > Sync your WeCom calendars into a local store and query them from your terminal — built for coding agents.
 
@@ -49,6 +16,12 @@ external tasks). It returns agent-friendly JSON with structured errors, and
 ships a companion Skill that teaches an agent how to use it. The metadata layer
 is never touched by sync, so annotations survive every refresh. The only writes
 (`meta set` / `meta delete`) support `--dry-run` and a session read-only posture.
+
+It complements Tencent's official
+[`wecom-cli`](https://github.com/WecomTeam/wecom-cli): use that to create and
+change events, and this to read your whole calendar history offline — the
+official CLI lists events only within 30 days before or after today. See
+[Alongside the official wecom-cli](#alongside-the-official-wecom-cli).
 
 📖 **Documentation site:** <https://angelmsger.github.io/wecom-calendar-cli/>
 
@@ -67,6 +40,9 @@ is never touched by sync, so annotations survive every refresh. The only writes
   incrementally (per-calendar change-tags) and idempotently; every query reads
   the store, so it is fast and works offline. Reads emit a stale notice when the
   store falls behind.
+- **Full calendar history** — the mirror holds your full
+  event history as well as what is scheduled ahead, so a query reaches last
+  quarter or last year as easily as next week.
 - **Agent-owned metadata** — attach free-form annotations to events by UID:
   namespaces / keys / JSON values for classification or external task links.
   `sync` never writes or deletes them, so they survive every re-sync.
@@ -78,6 +54,50 @@ is never touched by sync, so annotations survive every refresh. The only writes
   handled for you.
 - **Companion Skill** — a `wecom-calendar` Skill, embedded in the binary, that
   guides coding agents through the CLI.
+
+## Alongside the official wecom-cli
+
+Tencent ships an official WeCom command-line tool,
+[`wecom-cli`](https://github.com/WecomTeam/wecom-cli) (`@wecom/cli`), which also
+covers calendars. The two tools overlap only in reading events and are
+otherwise built for different jobs, so they work best installed side by side.
+
+The official CLI works live against WeCom's own service, which makes it the
+tool for acting on a calendar. Its schedule listing, however, reaches only 30
+days before or after today. Events outside that range remain on your calendar
+and in the WeCom client; `wecom-cli` just does not list them.
+
+`wecom-calendar-cli` reads through CalDAV instead — the endpoint WeCom provides
+for syncing a calendar into other calendar apps — which has no such limit.
+`sync` mirrors every event from 2000 onward into a local SQLite store, so last
+quarter's review meetings or a kickoff from last year are one `event list`
+away.
+
+| | `wecom-calendar-cli` | Official `wecom-cli` |
+|---|---|---|
+| Maintained by | An independent open-source project | Tencent |
+| Covers | Calendars only | Calendars, plus the rest of WeCom: messages, email, documents, todos, meetings and more |
+| Reaches WeCom through | CalDAV, the calendar-sync endpoint | WeCom's official service |
+| Readable date range | Everything CalDAV serves, from 2000 through two years ahead | 30 days before or after today |
+| Where a query runs | A local SQLite mirror — offline and fast, as fresh as the last `sync` | Live against the server on every call |
+| Changes to your calendar | None; it is read-only towards WeCom | Create, update and cancel events; manage attendees |
+| Availability across members | — | Free/busy lookup |
+| Your own annotations | An agent-owned `meta` layer that survives every sync | — |
+| Signs in with | Your WeCom email and an app-specific CalDAV password | Credentials configured by `wecom-cli init` |
+
+Checked against wecom-cli 1.3.2 on 2026-10-05.
+
+Recurring events are expanded from two years back to one year ahead by default.
+To query them further out, widen the window once with
+`wecom-calendar-cli expand --since <date> --until <date>`; later syncs keep it.
+
+In practice, reach for `wecom-cli` to change something or to work with the rest
+of WeCom, and for `wecom-calendar-cli` to look back, query offline, and
+annotate.
+
+This repository was archived from 2026-08-19 to 2026-10-05 on the assumption
+that the official CLI replaced it. Daily use exposed the limit above, and
+active maintenance resumed.
 
 ## Installation
 
@@ -166,7 +186,10 @@ calendar data and is never committed.
 | `sync` | pull CalDAV changes into the local store (incremental; `--full`, `--calendar`, `--dry-run`) |
 | `calendar list` | list calendars from the store (`--refresh` re-lists from the server) |
 | `event list` | query events in a `--since`/`--until` window (`--calendar`, `--limit`) |
+| `event get` | read one event in full by UID: description, location, organizer and attendees (`--occurrence`, `--include-meta`) |
+| `expand` | rebuild recurring-event occurrences; `--since`/`--until` widen the expansion window and pin it for later syncs |
 | `meta set` / `get` / `list` / `delete` | maintain the agent-owned metadata layer, keyed by event UID |
+| `whoami` | show the configured account, the identity attendee lists flag as `is_self` |
 | `config` / `auth` / `doctor` | setup, credentials and diagnostics |
 | `config get-contexts` / `use-context` / `delete-context` | manage multiple named servers |
 | `skill install` / `skill uninstall` | deploy or remove the embedded companion Skill (Claude Code, Codex, Cursor, Agents, Gemini, GitHub Copilot, OpenCode, Continue, Windsurf, Grok Build, Pi, Kilo Code, Roo Code) |
@@ -233,7 +256,8 @@ built for coding agents. Browse the full set at
 - **[bitbucket-cli](https://github.com/AngelMsger/bitbucket-cli)** — Bitbucket pull requests & code review
 - **[openobserve-cli](https://github.com/AngelMsger/openobserve-cli)** — OpenObserve logs, metrics & traces
 - **[jenkins-cli](https://github.com/AngelMsger/jenkins-cli)** — inspect Jenkins jobs & builds
-- **wecom-calendar-cli** — WeCom calendars, synced locally & annotated *(this project — **archived**, superseded by [`wecom-cli`](https://github.com/WecomTeam/wecom-cli))*
+- **[prometheus-cli](https://github.com/AngelMsger/prometheus-cli)** — Prometheus queries, targets, rules & alerts
+- **wecom-calendar-cli** — WeCom calendars, synced locally & annotated *(this project)*
 
 ## License
 
