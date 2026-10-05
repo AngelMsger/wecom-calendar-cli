@@ -1,6 +1,6 @@
 ---
 name: wecom-calendar
-version: 0.1.1
+version: 0.2.0
 description: "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query it and maintain an agent-owned metadata layer (event classification, external task links). Use when the user mentions a WeCom / 企业微信 calendar, schedule or 日程 and asks to sync or refresh calendar data, list calendars, see or find events in a date range — including history more than 30 days from today, which the official wecom-cli cannot list — read one event's full detail (description, location, organizer, attendees), or annotate, classify, tag or link an event to a task (e.g. a Feishu project item) and read those annotations. It never changes the calendar; creating, editing or cancelling events belongs to wecom-cli. Queries read the local store, so run `sync` first and re-sync when a read prints `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor read-only mode (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only; --allow-writes overrides) and accept --dry-run."
 metadata:
   requires:
@@ -75,6 +75,8 @@ Do not reach for a non-existent "live query" flag: the freshness contract is
   annotations). "Who am I" → `whoami`.
 - User wants to **annotate, classify, tag, or link an event to a task**
   (e.g. a Feishu project item) → `meta set <uid> <namespace> <key> <value>`.
+  It replaces the stored value; before overwriting or removing an annotation,
+  follow [working-with-the-user.md](references/working-with-the-user.md).
 - User wants to **read annotations** on an event → `meta get <uid> [ns] [key]`;
   across events → `meta list [--uid --namespace --key --value]` (`--value` is a
   reverse lookup: which events link to a task); to remove one →
@@ -105,8 +107,9 @@ wecom-calendar-cli meta list [--uid u --namespace ns --key k --value v]
 wecom-calendar-cli meta delete <uid> <ns> <key> [--dry-run] [--yes]  # remove one
 wecom-calendar-cli config init|show|path|get-contexts|use-context|delete-context
 wecom-calendar-cli auth login|status|logout         # Basic (email + CalDAV pw)
-wecom-calendar-cli doctor                           # config / creds / connectivity
-wecom-calendar-cli version | completion | skill install|status
+wecom-calendar-cli doctor                           # config / creds / connectivity / Skill state
+wecom-calendar-cli skill status|install|path|show|uninstall   # manage this Skill
+wecom-calendar-cli version | completion
 ```
 
 `sync` and the query commands are reads against the store; only `meta set` and
@@ -130,28 +133,59 @@ still resolves after tomorrow's `sync`. Always take the `uid` from an
   `{items, next, has_more}`. One page per call; when `has_more` is true, pass
   `--cursor` with the `next` value for the following page, or `--all` to walk
   every page, or `--limit N` to size each request.
-- `--format json|table|ndjson` (`ndjson` streams items, one JSON object per
-  line); `--fields a,b.c` projects output down to the fields you need.
+- `--format json|table|ndjson`; `--fields a,b.c` projects output down to the
+  fields you need. `ndjson` prints the items only, one JSON object per line,
+  without `next` or `has_more` — use JSON while following cursors.
+- **Read what the question needs.** Pass a window sized to the request and
+  stop paging once you have enough. `--limit` is a page size, not a total;
+  `--all` is for a complete inventory of the window.
 
 ## Safety & read-only posture
 
 Read-only mode blocks the two writes (`meta set`, `meta delete`) before they
 touch the store, returning `READONLY_BLOCKED` (exit 5). Enable it with
-`defaults.read_only: true` or `WECOM_CALENDAR_CLI_READ_ONLY=1`; override for a
-single invocation with the root `--allow-writes` flag. `sync` is a read against
-the WeCom server and a write to the *raw-fact* tables only — it is not blocked
-by read-only mode, and it never writes or deletes metadata. Preview any write
-with `--dry-run`. Details in [safety-modes.md](references/safety-modes.md).
+`defaults.read_only: true` or `WECOM_CALENDAR_CLI_READ_ONLY=1`; the root
+`--allow-writes` flag overrides it for one invocation whose write the current
+task authorizes. `sync` is a read against the WeCom server and a write to the
+*raw-fact* tables only — it is not blocked by read-only mode, and it never
+writes or deletes metadata. Preview any write with `--dry-run`. Details in
+[safety-modes.md](references/safety-modes.md).
 
-## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=1`
+## Working with the user
 
-Once you have loaded this Skill, export `WECOM_CALENDAR_CLI_SKILL=1` in the
-environment you run the CLI from. When the variable is absent the CLI assumes
-you may be inferring commands blindly and prints a one-line
-`{"_notice":{"skill":{…}}}` discovery hint on **stderr** (non-interactive
-sessions only). Setting it silences the hint; `wecom-calendar-cli skill status`
-reports whether it is set. Update notices are also one-line
-`{"_notice":{"update":{…}}}` on stderr — they never pollute stdout.
+Carry out explicitly authorized work without repeatedly asking permission.
+Reuse the `uid`, calendar id and window already supplied or returned in this
+task instead of searching again. Resolve an ambiguous event before writing; a
+dry run checks the request, not the user's intent. Respect an explicit
+read-only scope, and hand calendar changes to `wecom-cli`.
+
+Sync when the task starts or a read reports stale data — do not poll. Watch
+for a change only when the user asks, with a deadline or stopping condition.
+
+Report the answer first, then the events and window that support it. Say when
+stale data, partial coverage, truncation or unread pages limit the conclusion,
+and keep what the store shows apart from what you infer. Omit raw JSON and
+event details the question did not need.
+
+The full rules, including how to preserve existing annotations, are in
+[working-with-the-user.md](references/working-with-the-user.md).
+
+## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.2.0`
+
+Once you have loaded this Skill, export that exact value in the environment
+used to run the CLI. The CLI compares it with the embedded Skill version and
+emits a structured `{"_notice":{"skill":{…}}}` line on **stderr** when the
+Skill is missing, old, or uses the legacy unversioned handshake.
+`wecom-calendar-cli skill status` reports loaded, installed, and embedded
+versions. To suppress the notice without loading the Skill, set
+`WECOM_CALENDAR_CLI_NO_SKILL_HINT=1`.
+
+When a newer release exists, commands print a one-line
+`{"_notice":{"update":{…}}}` to **stderr** (never stdout, so parsing the data
+is unaffected). Follow every `next_steps` entry: upgrade the CLI, run
+`wecom-calendar-cli skill install`, then reload the agent context. `doctor`
+reports CLI and Skill status too. Silence update notices with
+`WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER=1`.
 
 ## Credentials (agents)
 

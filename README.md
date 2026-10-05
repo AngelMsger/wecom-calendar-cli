@@ -136,10 +136,14 @@ for installed agents and installs into each one found:
 ```bash
 wecom-calendar-cli skill install            # auto-detect; install for each agent found
 wecom-calendar-cli skill install --agent codex
+wecom-calendar-cli skill status             # compare loaded, installed, embedded versions
 wecom-calendar-cli skill uninstall          # remove it again
 ```
 
-Re-run it after upgrading the CLI to keep the Skill version-matched.
+After upgrading the CLI, re-run `skill install` and reload the agent context.
+The package manager does not replace a deployed copy; `skill status` and
+`doctor` report when the loaded or installed Skill no longer matches the
+binary, and update notices list the same steps in order.
 
 ### 3. Enable shell completion (optional)
 
@@ -193,6 +197,7 @@ calendar data and is never committed.
 | `config` / `auth` / `doctor` | setup, credentials and diagnostics |
 | `config get-contexts` / `use-context` / `delete-context` | manage multiple named servers |
 | `skill install` / `skill uninstall` | deploy or remove the embedded companion Skill (Claude Code, Codex, Cursor, Agents, Gemini, GitHub Copilot, OpenCode, Continue, Windsurf, Grok Build, Pi, Kilo Code, Roo Code) |
+| `skill status` / `skill path` | compare the loaded, installed and embedded Skill versions, and list install locations |
 | `version` / `completion` | build info and shell completion |
 
 In the default JSON output, list commands return a `{items, next, has_more}`
@@ -226,7 +231,11 @@ Failures are JSON on **stderr** (stdout stays a clean data channel) and map to
 stable exit codes: `0` success, `2` usage, `3` config, `4` auth, `5` permission,
 `6` not found, `7` rate limit, `8` network, `9` server, `10` parse, `11`
 conflict. Each error carries `next_steps` naming the command to run next, and
-`retryable` to guide back-off.
+`retryable` to guide safe retries. A metadata write can be committed before its
+result fails to print: `WRITE_SUCCEEDED_OUTPUT_FAILED` preserves the entry's
+`(uid, namespace, key)` and a read-only `meta get` recovery command with
+`retryable: false`. Every other `meta` write failure happens before the change
+is applied, so a local write never has an unknown outcome.
 
 ## Development
 

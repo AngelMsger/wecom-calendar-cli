@@ -26,8 +26,9 @@ matching GitHub Release and verifies its SHA-256 checksum. If your npm setup
 disables install scripts, the binary is fetched on first run instead.
 
 The companion `wecom-calendar` Skill for coding agents is embedded in the
-binary; `wecom-calendar-cli skill install` deploys a copy that always matches
-the installed CLI version.
+binary. After installing or upgrading the package, run
+`wecom-calendar-cli skill install` and reload the agent context.
+`wecom-calendar-cli skill status` reports version alignment.
 
 > **Credential note.** Auth is HTTP Basic: your WeCom email plus an
 > **app-specific CalDAV password** obtained in the WeCom mobile app (Workbench →

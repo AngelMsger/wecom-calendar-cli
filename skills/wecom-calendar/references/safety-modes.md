@@ -17,9 +17,9 @@ those writes.
 - **`sync` is not a metadata write.** It reads the WeCom server and reconciles
   the raw-fact tables of the store; read-only mode does **not** block it, and it
   never writes or deletes metadata. `sync --dry-run` still previews what it
-  would reconcile.
-- **Reads** (never blocked): `calendar list`, `event list`, `meta get`,
-  `meta list`, `doctor`, `config show`.
+  would reconcile. `expand` likewise only rebuilds derived occurrences.
+- **Reads** (never blocked): `calendar list`, `event list`, `event get`,
+  `whoami`, `meta get`, `meta list`, `doctor`, `config show`.
 
 ## `--dry-run` — preview, never apply
 
@@ -30,16 +30,22 @@ and prints what it *would* change as JSON, without writing to the store.
 wecom-calendar-cli meta set <uid> task feishu_project 6949886165 --dry-run
 # {
 #   "dry_run": true,
-#   "op": "set",
-#   "uid": "<uid>",
-#   "namespace": "task",
 #   "key": "feishu_project",
-#   "value": "6949886165"
+#   "namespace": "task",
+#   "source": "agent",
+#   "uid": "<uid>",
+#   "value": 6949886165
 # }
 ```
 
+`value` is shown as it would be stored — here a JSON number, because the text
+parses as one (see [metadata.md](metadata.md)). A `meta delete --dry-run`
+reports `"status": "would_delete"` with the `current_value`, or
+`"status": "not_found"`.
+
 Use it before any write whose target (`uid`, namespace, key) was inferred
 rather than pasted in literally — confirm the UID matches the event you mean.
+A dry run checks the request; it is not a second approval step.
 
 ## `--yes` — confirm a destructive delete
 
@@ -68,12 +74,14 @@ Blocked writes return a structured error:
   "error": {
     "category": "permission",
     "code": "READONLY_BLOCKED",
-    "message": "operation \"MetaSet\" blocked: read-only mode is enabled",
+    "message": "meta set is blocked by read-only mode",
+    "hint": "Pass --allow-writes, or unset defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY.",
     "next_steps": [
       "Add --allow-writes to the command line",
       "unset WECOM_CALENDAR_CLI_READ_ONLY",
       "Set defaults.read_only=false in ~/.angelmsger/wecom-calendar/config.yaml"
-    ]
+    ],
+    "retryable": false
   }
 }
 ```
@@ -82,8 +90,11 @@ Exit code: 5 (`permission`).
 
 ### Per-call override: `--allow-writes`
 
-When you genuinely need to write under a read-only posture, add the root-level
-`--allow-writes` flag:
+When the current task authorizes the concrete write despite a configured
+read-only default, use the root-level `--allow-writes` flag for that invocation.
+Do not override an explicit read-only instruction or change persistent settings
+just because an error suggests it. Existing authorization needs no repeated
+confirmation; unresolved scope needs clarification.
 
 ```bash
 WECOM_CALENDAR_CLI_READ_ONLY=1 wecom-calendar-cli --allow-writes \
@@ -109,7 +120,8 @@ enabled read-only would lose the ability to recover or refresh:
    set `WECOM_CALENDAR_CLI_READ_ONLY=1` for the session. Every read still works;
    any accidental `meta` write hits `READONLY_BLOCKED` before touching the store.
 2. Before a `meta set` / `meta delete` whose target you inferred, run it with
-   `--dry-run` and confirm the UID and (namespace, key).
+   `--dry-run` and confirm the UID and (namespace, key). When the user already
+   named the event and the annotation, write it directly.
 3. They compose: `WECOM_CALENDAR_CLI_READ_ONLY=1 wecom-calendar-cli
    --allow-writes meta delete <uid> task feishu_project --dry-run` previews the
    delete without applying it; drop `--dry-run` and add `--yes` to apply.

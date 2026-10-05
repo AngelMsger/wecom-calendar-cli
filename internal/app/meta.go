@@ -71,7 +71,7 @@ func newMetaSetCmd(s *appState) *cobra.Command {
 			if !exists {
 				out["warning"] = "no live event with this uid in the store (metadata kept anyway)"
 			}
-			return s.emit(out)
+			return s.emitAfterWrite(out, "set", metaWriteTarget(uid, ns, key))
 		},
 	}
 	cmd.Flags().StringVar(&source, "source", "agent", "provenance tag: agent, user or auto")
@@ -202,12 +202,13 @@ func newMetaDeleteCmd(s *appState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			status := "deleted"
+			out := map[string]any{"uid": uid, "namespace": ns, "key": key, "status": "deleted"}
 			if n == 0 {
-				status = "not_found"
+				// Nothing matched, so nothing changed: there is no write to report.
+				out["status"] = "not_found"
+				return s.emit(out)
 			}
-			return s.emit(map[string]any{"uid": uid, "namespace": ns,
-				"key": key, "status": status})
+			return s.emitAfterWrite(out, "deleted", metaWriteTarget(uid, ns, key))
 		},
 	}
 	f := cmd.Flags()
@@ -221,7 +222,12 @@ func (s *appState) guardWrite(op string) error {
 	if s.readOnly() {
 		return cerrors.Newf(cerrors.CategoryPermission, "READONLY_BLOCKED",
 			"%s is blocked by read-only mode", op).
-			WithHint("Pass --allow-writes, or unset defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY.")
+			WithHint("Pass --allow-writes, or unset defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY.").
+			WithNextSteps(
+				"Add --allow-writes to the command line",
+				"unset WECOM_CALENDAR_CLI_READ_ONLY",
+				"Set defaults.read_only=false in ~/.angelmsger/wecom-calendar/config.yaml",
+			)
 	}
 	return nil
 }

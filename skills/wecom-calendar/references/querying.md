@@ -94,8 +94,8 @@ the people and the agenda. Both hit the local store, so the extra call is cheap.
 ## Output shaping
 
 - `--format json` (default) prints the full envelope; `--format table` is a
-  compact human view; `--format ndjson` streams items one JSON object per line
-  for large windows.
+  compact human view; `--format ndjson` prints the items only, one JSON object
+  per line, without `next` or `has_more`. Use JSON while following cursors.
 - `--fields a,b.c` projects the output down to just the fields you need — for
   example `--fields uid,summary,start` when you only want a title list. This
   composes with any format.
@@ -113,8 +113,15 @@ wecom-calendar-cli event list --since 2026-01-01 --until 2027-01-01 --limit 100 
 wecom-calendar-cli event list --since 2026-01-01 --until 2027-01-01 --all
 ```
 
-- `--limit N` sizes each page (default 200 when omitted).
+- `--limit N` sizes each page (default 200 when omitted). It is a page size,
+  not a cap on the total.
 - The cursor is opaque and **bound to the query** — pass the `next` value back
   verbatim and keep `--since/--until/--calendar` identical across pages, or the
   CLI rejects it with `CURSOR_MISMATCH`. Do not construct a cursor by hand.
-- `--all` returns every match in one page (fine for a local store query).
+- Give both dates explicitly on every page. A default bound is relative to the
+  current time, so the next call computes a different window and the cursor no
+  longer matches.
+- `--all` returns every match in one page. Use it when the task needs the
+  complete window; otherwise read one page and follow `next` only until you
+  have what the question needs. Say so when you stopped before `has_more` was
+  false.

@@ -4,14 +4,23 @@
 # The default run is fully offline: it drives the built binary against a
 # throwaway config directory and asserts the agent-facing contracts that do not
 # need a server (output on stdout, notices/errors on stderr, exit codes,
-# read-only and --dry-run gates, cursor validation). Set WECOM_CALENDAR_E2E_LIVE=1
-# — with real credentials in the environment — to also exercise a live sync.
+# read-only and --dry-run gates, cursor validation, write outcomes, and the
+# CLI/Skill upgrade loop). Set WECOM_CALENDAR_E2E_LIVE=1 — with real credentials
+# in the environment — to also exercise a live sync.
 set -u -o pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="${WECOM_CALENDAR_BIN:-$ROOT/bin/wecom-calendar-cli}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+# Read the Skill version from the embedded SKILL.md so bumping it does not
+# silently stale the handshake assertions below.
+SKILL_MD="$ROOT/skills/wecom-calendar/SKILL.md"
+SKILL_VERSION="$(sed -n 's/^version: *//p' "$SKILL_MD" | head -1)"
+if [ -z "$SKILL_VERSION" ]; then
+  echo "could not read version: from skills/wecom-calendar/SKILL.md" >&2
+  exit 1
+fi
 
 fail=0
 pass() { printf '  ok  %s\n' "$1"; }
@@ -30,6 +39,20 @@ assert_stdout_contains() {
   local label="$1" needle="$2"; shift 2; shift
   local out; out="$("$@" 2>/dev/null)"
   if printf '%s' "$out" | grep -q -- "$needle"; then pass "$label"; else bad "$label (stdout missing '$needle')"; fi
+}
+
+# assert_stderr_contains <label> <needle> -- <cmd...>
+assert_stderr_contains() {
+  local label="$1" needle="$2"; shift 2; shift
+  local err; err="$("$@" 2>&1 >/dev/null)"
+  if printf '%s' "$err" | grep -qF -- "$needle"; then pass "$label"; else bad "$label (stderr missing '$needle')"; fi
+}
+
+# offline <cmd...> runs a command that could reach the server from the scratch
+# directory with the credential variables cleared, so neither a developer's
+# .env nor an exported WECOM_CALENDAR_* turns an offline check into a request.
+offline() {
+  (cd "$WORK" && env -u WECOM_CALENDAR_USERNAME -u WECOM_CALENDAR_PASSWORD "$@")
 }
 
 if [ ! -x "$BIN" ]; then
@@ -72,6 +95,99 @@ assert_stdout_contains "meta list --value reverse lookup" '"items"' -- "${base[@
 # malformed input is a structured usage error (exit 2), not a crash.
 assert_exit 2 "unknown flag -> usage error"  -- "${base[@]}" event list --nope
 assert_exit 2 "bad --cursor -> usage error"  -- "${base[@]}" event list --cursor not-a-cursor
+
+echo "== metadata write sequences from the Skill =="
+# set overwrites (last write wins), --allow-writes lifts read-only for one call,
+# and a value that parses as JSON keeps its type unless quoted as a JSON string.
+assert_stdout_contains "meta set reports status" '"status": "set"' -- "${base[@]}" meta set e2e-uid task link T-1
+assert_stdout_contains "meta set overwrites"     '"value": "T-2"' -- "${base[@]}" meta set e2e-uid task link T-2
+"${base[@]}" meta get e2e-uid task link 2>/dev/null | grep -q 'T-1' \
+  && bad "meta set merged instead of replacing" || pass "meta get shows only the last value"
+assert_stderr_contains "read-only block names the override" 'Add --allow-writes to the command line' \
+  -- env WECOM_CALENDAR_CLI_READ_ONLY=1 "${base[@]}" meta set e2e-uid class category x
+assert_stdout_contains "--allow-writes overrides read-only once" '"status": "set"' \
+  -- env WECOM_CALENDAR_CLI_READ_ONLY=1 "${base[@]}" --allow-writes meta set e2e-uid class category customer-meeting
+assert_stdout_contains "numeric text is stored as a number" '"value": 6949886165' \
+  -- "${base[@]}" meta set e2e-uid task feishu_project 6949886165 --dry-run
+assert_stdout_contains "a quoted JSON string stays a string" '"value": "6949886165"' \
+  -- "${base[@]}" meta set e2e-uid task feishu_project '"6949886165"' --dry-run
+assert_stdout_contains "meta delete --dry-run shows the current value" '"status": "would_delete"' \
+  -- "${base[@]}" meta delete e2e-uid class category --dry-run
+assert_stdout_contains "meta delete --yes applies" '"status": "deleted"' \
+  -- "${base[@]}" meta delete e2e-uid class category --yes
+assert_stdout_contains "repeated delete is not an error" '"status": "not_found"' \
+  -- "${base[@]}" meta delete e2e-uid class category --yes
+
+echo "== committed writes whose result cannot be printed =="
+# The local write has no read-back and no uncertain outcome; the one step after
+# the commit is printing the result. An unknown --format fails exactly there.
+for operation in set delete; do
+  case "$operation" in
+    set)    args=(meta set e2e-uid task outcome T-9) ;;
+    delete) args=(meta delete e2e-uid task outcome --yes) ;;
+  esac
+  result_file="$WORK/write-outcome.err"
+  out="$("${base[@]}" "${args[@]}" --format bogus 2>"$result_file")"
+  result_code=$?
+  result_error="$(cat "$result_file")"
+  if [ "$result_code" = 2 ] && [ -z "$out" ] \
+     && [[ "$result_error" == *'WRITE_SUCCEEDED_OUTPUT_FAILED'* ]] \
+     && [[ "$result_error" == *'metadata entry e2e-uid / task / outcome'* ]] \
+     && [[ "$result_error" == *'"retryable": false'* ]] \
+     && [[ "$result_error" == *"wecom-calendar-cli meta get 'e2e-uid' 'task' 'outcome'"* ]]; then
+    pass "meta $operation preserves the committed write and entry identity after an output failure"
+  else
+    bad "meta $operation output failure contract (exit $result_code, stdout: $out, stderr: $result_error)"
+  fi
+  # Follow the recovery step: the read shows the committed state.
+  read_back="$("${base[@]}" meta get 'e2e-uid' 'task' 'outcome' 2>/dev/null)"
+  case "$operation" in
+    set)    [[ "$read_back" == *'"T-9"'* ]] && pass "recovery read shows the stored value" \
+                                            || bad "recovery read after set (got: $read_back)" ;;
+    delete) [[ "$read_back" == *'"items": []'* ]] && pass "recovery read shows the entry is gone" \
+                                                  || bad "recovery read after delete (got: $read_back)" ;;
+  esac
+done
+assert_stderr_contains "no write, no write-outcome claim" '"code": "BAD_FORMAT"' \
+  -- "${base[@]}" meta delete e2e-uid task outcome --yes --format bogus
+
+echo "== CLI and Skill upgrade loop =="
+assert_stdout_contains "doctor reports Skill" '"companion-skill"' -- offline "${base[@]}" doctor --no-update-check
+SKILL_DIR="$WORK/skills"
+assert_stdout_contains "skill install alignment" '"alignment": "current"' \
+  -- "$BIN" skill install --dir "$SKILL_DIR"
+SKILL_HOME="$WORK/skill-home"; mkdir -p "$SKILL_HOME"
+assert_stdout_contains "skill install for Codex" '"alignment": "current"' \
+  -- env HOME="$SKILL_HOME" "$BIN" skill install --agent codex
+assert_stdout_contains "skill status version aligned" '"loaded_status": "current"' \
+  -- env HOME="$SKILL_HOME" WECOM_CALENDAR_CLI_SKILL="$SKILL_VERSION" "$BIN" skill status
+assert_stderr_contains "legacy Skill handshake is detected" '"status":"unknown"' \
+  -- env -u WECOM_CALENDAR_CLI_NO_SKILL_HINT HOME="$SKILL_HOME" WECOM_CALENDAR_CLI_SKILL=1 \
+       WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER=1 "${base[@]}" event list
+# The Skill tells an agent which handshake value to export; it must be the
+# version the binary embeds, or every agent that follows it reads as outdated.
+if grep -qF "WECOM_CALENDAR_CLI_SKILL=$SKILL_VERSION" "$SKILL_MD"; then
+  pass "Skill handshake instruction names its own version"
+else
+  bad "SKILL.md does not tell agents to export WECOM_CALENDAR_CLI_SKILL=$SKILL_VERSION"
+fi
+# The update notice compares release versions, and `make build` stamps whatever
+# `git describe` prints (a bare commit hash in a shallow clone). Pin a
+# release-like version, and seed the 24h release cache so the check stays
+# offline.
+PINNED="$WORK/wecom-calendar-cli-pinned"
+UPDATE_CFG="$WORK/update-cfg"; mkdir -p "$UPDATE_CFG"
+printf '{"checked_at":"%s","latest":"999.0.0"}' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$UPDATE_CFG/update-cache.json"
+if (cd "$ROOT" && CGO_ENABLED=0 go build \
+      -ldflags "-X github.com/angelmsger/wecom-calendar-cli/pkg/constants.Version=0.0.1" \
+      -o "$PINNED" ./cmd/wecom-calendar-cli) 2>"$WORK/pinned-build.log"; then
+  assert_stderr_contains "update notice includes Skill refresh" \
+    '"next_steps":["npm install -g @angelmsger/wecom-calendar-cli@latest","wecom-calendar-cli skill install","reload the agent context' \
+    -- env -u WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER WECOM_CALENDAR_CLI_SKILL="$SKILL_VERSION" \
+         "$PINNED" --config "$UPDATE_CFG" event list
+else
+  bad "could not build the version-pinned binary: $(cat "$WORK/pinned-build.log")"
+fi
 
 if [ "${WECOM_CALENDAR_E2E_LIVE:-0}" = "1" ]; then
   echo "== live sync =="

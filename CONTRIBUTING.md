@@ -41,7 +41,9 @@ in `build/npm/`.
 - `make test` — `go test ./...` across all packages.
 - `make e2e` — build, then run `scripts/e2e.sh` offline-contract checks
   (read-only, `--dry-run`, the destructive-confirmation gate, cursor handling,
-  and exit codes). No network or credentials required.
+  exit codes, write outcomes, the metadata sequences the Skill documents, and
+  the CLI/Skill upgrade loop). No network or credentials required; it needs the
+  Go toolchain to build one version-pinned binary.
 - `make e2e-live` — additionally exercise a real sync; set
   `WECOM_CALENDAR_SERVER` / `WECOM_CALENDAR_USERNAME` / `WECOM_CALENDAR_PASSWORD`
   first.
@@ -73,6 +75,13 @@ Use Go's standard `testing` package; name files `*_test.go` and functions
 `httptest`. Before opening a PR, run `make test` and `make e2e` (and
 `make e2e-live` only when real credentials are available).
 
+For changes to the metadata writes, keep every check and read ahead of the
+mutating statement, and report a failure after it through `emitAfterWrite` so
+the entry identity and a read-only recovery step survive. Test the
+committed-then-failed path together with the resulting store state; never
+describe a write that did not happen as successful. The contract is in
+[`AGENTS.md`](AGENTS.md#write-outcomes).
+
 ## Commits, changelog & versioning
 
 Keep commits scoped to one logical change with concise, imperative messages.
@@ -89,4 +98,5 @@ architecture, commands, flags, or output model, update the relevant file
 (`AGENTS.md`, `README.md`, the companion Skill under `skills/wecom-calendar/`,
 and the generated `docs/cli/`) in the same commit. The companion Skill is the
 agent's source of truth — keep it exactly in step with the real command tree and
-output fields.
+output fields. When it changes, bump its `version:` and the handshake value in
+its "Agent handshake" section together.

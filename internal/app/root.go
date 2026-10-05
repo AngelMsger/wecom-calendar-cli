@@ -77,7 +77,8 @@ func newRootCmdWithState() (*cobra.Command, *appState) {
 			"usage, safety modes, and setup and is the source of truth for driving this\n" +
 			"CLI. If you are an agent, load that Skill before composing commands. Check\n" +
 			"status with `wecom-calendar-cli skill status`; install it with\n" +
-			"`wecom-calendar-cli skill install`.",
+			"`wecom-calendar-cli skill install`. After a CLI upgrade, refresh the Skill\n" +
+			"and reload the agent context.",
 		Version:       versionString(),
 		SilenceErrors: true,
 		SilenceUsage:  true,

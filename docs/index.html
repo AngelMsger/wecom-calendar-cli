@@ -296,7 +296,7 @@ a.card:hover { text-decoration: none; transform: translateY(-3px); border-color:
       <div class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8l-4 4 4 4"/><path d="M16 8l4 4-4 4"/><path d="M13 5l-2 14"/></svg></div>
         <h3>Agent-first output</h3>
-        <p>JSON by default, with structured errors — categories, exit codes and recovery hints a coding agent can branch on, and a stale notice when the store falls behind.</p>
+        <p>JSON by default, with structured errors and read-only recovery steps, and a stale notice when the store falls behind. A committed write is never reported as a plain failure.</p>
       </div>
       <div class="card feat">
         <div class="feat-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
@@ -361,7 +361,8 @@ npm install -g @angelmsger/wecom-calendar-cli</pre>
         <h3>1 · Companion Skill</h3>
         <p style="margin:6px 0 12px">A <code>wecom-calendar</code> Skill is embedded in the binary. It detects your coding agents — Claude Code, Codex, Cursor and ten more — and installs for each one found:</p>
         <div class="term"><div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="p">$</span> wecom-calendar-cli skill install</pre></div>
+<pre><span class="p">$</span> wecom-calendar-cli skill install
+<span class="c"># Re-run after CLI upgrades, then reload the agent context.</span></pre></div>
       </div>
       <div class="card">
         <h3>2 · Shell completion</h3>

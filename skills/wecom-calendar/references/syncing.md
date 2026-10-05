@@ -80,7 +80,8 @@ server, keep the store warm by scheduling `sync` yourself — e.g. a `cron` or
 ```
 
 The tool does not sync on its own (reads stay offline and instant); a read only
-prints a `_notice.stale` hint when the store is behind.
+prints a `_notice.stale` hint when the store is behind. A scheduled job is the
+user's to set up; an agent adds one only when asked.
 
 ## `--full` — reconcile from scratch
 
@@ -149,3 +150,6 @@ have to:
   behind the server. Re-run `sync`, then re-query.
 - `--dry-run` first if you only need to know *whether* anything changed without
   writing to the store.
+- **Not in a loop.** One sync per need; do not poll for a change unless the
+  user asked you to watch for one, with a deadline or stopping condition. See
+  [working-with-the-user.md](working-with-the-user.md#bounded-reads-no-open-ended-waiting).

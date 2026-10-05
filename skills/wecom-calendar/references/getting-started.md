@@ -9,9 +9,12 @@ a credential, and — for queries — a synced local store.
 wecom-calendar-cli doctor
 ```
 
-`doctor` runs the checks — configuration, credentials, connectivity, and store
-freshness — and prints a JSON report. If `healthy` is `true`, you are ready.
-Otherwise each failing check's `detail` explains what to fix.
+`doctor` checks configuration, credentials and connectivity and prints a JSON
+report. If `healthy` is `true`, you are ready; otherwise each failing check's
+`detail` explains what to fix. Two further entries are informational and never
+change `healthy`: `calendars` (how many are visible) and `companion-skill`
+(whether this Skill is installed, loaded and current, with the command to run
+when it is not).
 
 ```bash
 wecom-calendar-cli auth status   # is a usable credential resolvable?

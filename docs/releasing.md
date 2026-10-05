@@ -58,6 +58,12 @@ These are subtle and each one silently breaks `npm publish`:
 
 ## Cutting a release
 
+Run `make lint`, `make test`, `make e2e`, `make docs`, and `npm test` in
+`build/npm` before tagging. Confirm generated docs are stable on a second
+generation, and that the companion Skill documents the write outcome, the
+collaboration rules and the handshake value for its current version. The suite
+needs no WeCom account; report any live verification separately.
+
 Before tagging, update [`CHANGELOG.md`](../CHANGELOG.md): rename the
 `[Unreleased]` section to the new version with today's date, add a fresh empty
 `[Unreleased]` heading, and update the comparison links at the bottom. Bump the
@@ -130,9 +136,17 @@ release ships a Skill that matches the CLI version; users deploy it with
 `wecom-calendar-cli skill install`. The Skill is also published in the git
 repository for the `npx skills` workflow.
 
+A deployed copy is not replaced by the package manager. After every CLI
+upgrade users run `wecom-calendar-cli skill install` and reload the agent
+context; update notices list those steps in order, and `skill status` and
+`doctor` compare the loaded, installed and embedded versions.
+
 The Skill is versioned independently via the `version:` field in
 `skills/wecom-calendar/SKILL.md`. Bump it whenever the Skill or its
-`references/` change.
+`references/` change, and update the handshake value in the Skill's "Agent
+handshake" section to the same version: agents export that literal, and the CLI
+reports any other value as outdated. `scripts/e2e.sh` fails when the two
+disagree.
 
 ## Local data caveat
 

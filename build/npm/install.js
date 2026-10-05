@@ -113,10 +113,13 @@ async function install() {
 function welcomeText() {
   return [
     '',
-    'wecom-calendar-cli is ready. First-time setup:',
+    'wecom-calendar-cli is ready. After every install or upgrade:',
     '',
-    '  wecom-calendar-cli config init   configure your CalDAV server + credentials',
-    '  wecom-calendar-cli skill install install the coding-agent Skill',
+    '  wecom-calendar-cli skill install   install or refresh the coding-agent Skill',
+    '  reload your agent context          load the refreshed Skill',
+    '',
+    'First-time server setup:',
+    '  wecom-calendar-cli config init     configure your CalDAV server + credentials',
     '',
     'Everyday use:',
     '  wecom-calendar-cli sync',

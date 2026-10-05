@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CLI and Skill upgrade loop.** Update notices now carry ordered
+  `next_steps`: upgrade the CLI, run `skill install`, reload the agent context.
+  `skill status` compares the loaded, installed and embedded Skill versions and
+  returns `loaded_version`, `loaded_status` and `next_steps` (`next` is now the
+  first of those steps); `skill path` and `skill install` report each copy's
+  `version` and `alignment`. `doctor` adds an informational `companion-skill`
+  check that does not change its `healthy` verdict. The npm setup text treats
+  refreshing the Skill as an explicit step after every install or upgrade.
+- **Write outcomes for metadata writes.** When `meta set` or `meta delete` has
+  committed but its result cannot be printed — an unknown `--format`, for
+  example — the error is now `WRITE_SUCCEEDED_OUTPUT_FAILED`. It names the
+  `(uid, namespace, key)` entry and the status it reached, keeps the output
+  failure's category, exit code and cause, sets `retryable: false`, and gives a
+  read-only `meta get` recovery command. Previously the command exited with a
+  bare usage error although the store had changed.
+
+### Changed
+
+- **The Skill handshake is versioned.** `WECOM_CALENDAR_CLI_SKILL` now carries
+  the loaded Skill's version. The stderr Skill notice reports `status`
+  (`not_loaded`, `outdated`, `unknown` or `current`), `loaded_version`,
+  `embedded_version` and `next_steps`, and stays silent only when the versions
+  match. The legacy value `1` is reported as `unknown` until the agent reloads
+  the refreshed Skill and exports its version.
+- **Companion Skill collaboration rules.** The Skill now tells agents to reuse
+  identifiers and windows they already hold, continue within the authorization
+  they have, treat `--dry-run` as a check rather than a second approval, use
+  `--allow-writes` only for a write the task authorizes, read bounded windows
+  and pages, avoid polling without a deadline, read before overwriting an
+  annotation (`meta set` replaces the whole value), and report the result with
+  its evidence and limits. The rules live in one reference,
+  `working-with-the-user.md`, linked from the entry points. Skill bumped to
+  `0.2.0`.
+
+### Fixed
+
+- **`READONLY_BLOCKED` recovery steps.** A blocked `meta` write listed the
+  generic permission step about calendar visibility in the WeCom client. It now
+  lists the read-only overrides, as the sibling CLIs do.
+- **Skill accuracy.** Corrected examples and claims that did not match the
+  binary: the 401 error code is `CALDAV_AUTH`; the `meta set --dry-run` and
+  `READONLY_BLOCKED` samples show the real output; a value that parses as JSON
+  keeps that type, so numeric text is stored as a number unless passed as a
+  quoted JSON string; a missing metadata entry is an empty result rather than a
+  `not_found` error; `meta delete` examples include the `--yes` an agent needs;
+  `doctor` is described by the checks it runs; and a cursor needs explicit
+  `--since`/`--until` on every page because a default bound moves with the
+  clock.
+
 ## [0.2.3] - 2026-10-05
 
 Version 0.2.2 was prepared on 2026-08-12 but never published; the addition
