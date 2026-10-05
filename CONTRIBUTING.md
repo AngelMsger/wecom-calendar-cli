@@ -22,7 +22,8 @@ SQLite store and queries them. The entrypoint is `cmd/wecom-calendar-cli/`;
 - `pkg/` — the importable, stateless client layer: `caldav` (the purpose-built
   CalDAV client for the non-standard Tencent Exmail backend), `transport` (HTTP
   retry, same-origin redirect guard, decorators), `errors` (structured error
-  model + exit codes), `constants`.
+  model + exit codes), `timeutil` (the `--since`/`--from`/`--to` window parser),
+  `constants`.
 - `internal/app` — the Cobra command tree, one noun per file.
 - `internal/{config,auth,output,update,cliflags}` — setup, credentials,
   presentation, and agent-facing plumbing, mirrored from the sibling CLIs.
@@ -31,7 +32,8 @@ SQLite store and queries them. The entrypoint is `cmd/wecom-calendar-cli/`;
   persistence, the CalDAV→store sync orchestrator, iCalendar parsing (including
   embedded-VTIMEZONE / non-IANA TZID resolution), and recurrence expansion.
 
-Tests sit beside the code as `*_test.go`. The companion agent Skill is in
+Tests sit beside the code as `*_test.go`. `test/seedstore/` is a helper the
+end-to-end script runs to fill a scratch store. The companion agent Skill is in
 `skills/wecom-calendar/`, generated docs in `docs/cli/`, and npm release assets
 in `build/npm/`.
 
@@ -40,10 +42,12 @@ in `build/npm/`.
 - `make build` — build `bin/wecom-calendar-cli` with version metadata.
 - `make test` — `go test ./...` across all packages.
 - `make e2e` — build, then run `scripts/e2e.sh` offline-contract checks
-  (read-only, `--dry-run`, the destructive-confirmation gate, cursor handling,
+  (read-only, `--dry-run`, the destructive-confirmation gate, the time-window
+  flags and their deprecated aliases, cursor handling, NDJSON continuation,
   exit codes, write outcomes, the metadata sequences the Skill documents, and
   the CLI/Skill upgrade loop). No network or credentials required; it needs the
-  Go toolchain to build one version-pinned binary.
+  Go toolchain to build one version-pinned binary and to seed a scratch store
+  with `test/seedstore`.
 - `make e2e-live` — additionally exercise a real sync; set
   `WECOM_CALENDAR_SERVER` / `WECOM_CALENDAR_USERNAME` / `WECOM_CALENDAR_PASSWORD`
   first.
@@ -74,6 +78,13 @@ Use Go's standard `testing` package; name files `*_test.go` and functions
 `caldav.Client`; the CalDAV client and transport are covered with fixtures and
 `httptest`. Before opening a PR, run `make test` and `make e2e` (and
 `make e2e-live` only when real credentials are available).
+
+For a command that filters by time, resolve the window through `timeFlags`
+(`internal/app/timeflags.go`) so the flags, defaults and `BAD_TIME_RANGE`
+errors stay uniform, and add a case for every way the window differs from the
+family contract. For a command that paginates, pass its page descriptor to
+`emitList` and extend the seeded pagination block of `scripts/e2e.sh`. Both
+contracts are in [`AGENTS.md`](AGENTS.md#time-windows).
 
 For changes to the metadata writes, keep every check and read ahead of the
 mutating statement, and report a failure after it through `emitAfterWrite` so

@@ -19,15 +19,41 @@ local store — run `sync` to update the store.
 
 ## List events in a window
 
-`event list` takes an optional date window; both bounds are `YYYY-MM-DD` in the
-display timezone. `--since` defaults to 30 days ago and `--until` to 30 days
-ahead, and **`--until` is exclusive** (the window is `[since, until)`):
+`event list` takes an optional window `[from, to)`: **`--from` is inclusive and
+`--to` is exclusive**, so adjacent windows never overlap.
 
 ```bash
-wecom-calendar-cli event list                                             # default -30d .. +30d
-wecom-calendar-cli event list --since 2026-07-01 --until 2026-08-01        # all of July
-wecom-calendar-cli event list --since 2026-07-21 --until 2026-07-26 --calendar <id>
+wecom-calendar-cli event list                                       # 30 days either side of today
+wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01     # all of July
+wecom-calendar-cli event list --since 7d                            # the last 7 days, ending now
+wecom-calendar-cli event list --from now --to now+14d               # the next two weeks
+wecom-calendar-cli event list --from 2026-07-21 --to 2026-07-26 --calendar <id>
 ```
+
+- `--since <duration>` looks back from now (`24h`, `7d`, `2w`). It ends at the
+  current instant, so it never returns upcoming events — use `--from`/`--to`
+  to look ahead.
+- `--from` and `--to` each take a date `YYYY-MM-DD`, an RFC 3339 instant with an
+  offset (`2026-07-01T09:00:00+08:00`), or `now`, `now-7d`, `now+14d`. A bound
+  may lie in the future. A bare duration (`--from 7d`) is rejected: write
+  `now-7d` or `now+7d`.
+- **A date means midnight in the display timezone (Asia/Shanghai), not UTC** —
+  `--from 2026-07-01` is `2026-07-01T00:00:00+08:00`. An instant with an offset
+  is taken exactly.
+- `--since` cannot be combined with `--from`/`--to`, and `--to` requires
+  `--from`. A broken window is a `BAD_TIME_RANGE` usage error (exit 2) whose
+  `next_steps` hold working examples.
+- With no window flag the window runs from midnight 30 days ago to the end of
+  the day 30 days ahead, so it is the same for every call made on one day.
+  With `--from` alone it ends at that same point 30 days ahead, not now.
+- There is no `--actor` filter. Use `whoami` and each attendee's `is_self` to
+  tell your own participation apart.
+
+`--until`, and `--since` with a date, are the previous spellings of `--to` and
+`--from`. They still work and print one
+`{"_notice":{"deprecated_flag":{…}}}` line each on stderr naming the
+replacement; write the new flags. (`--until` on its own keeps its old default
+lower bound; `--to` on its own is an error.)
 
 - An event is returned when its occurrence **overlaps** the window, not only
   when it starts inside it — a meeting that began earlier but is still running
@@ -38,11 +64,14 @@ wecom-calendar-cli event list --since 2026-07-21 --until 2026-07-26 --calendar <
   logical occurrence).
 - Occurrences are expanded over a bounded window (default 2 years back to 1 year
   ahead). A query beyond that prints a `{"_notice":{"partial_coverage":…}}` on
-  stderr; widen it with `wecom-calendar-cli expand --since <date> --until <date>`.
+  stderr; widen it with `wecom-calendar-cli expand --from <date> --to <date>`.
   A window set that way is **pinned**: every later `sync` reuses it, so it does
   not revert on the next refresh. Run `expand` with no flags to forget the pin
   and go back to the rolling default. Both commands report the window they used
   as `covered_from` / `covered_to` and whether it was pinned (`window_pinned`).
+  `expand` takes dates or RFC 3339 instants, either bound alone, and has no
+  look-back `--since <duration>` — a window ending now would drop every future
+  occurrence, so it is rejected with `BAD_TIME_RANGE`.
 - A very long window can push a frequently recurring series past the per-event
   occurrence limit. When that happens the run prints
   `{"_notice":{"expansion_truncated":…}}` on stderr and reports
@@ -94,8 +123,9 @@ the people and the agenda. Both hit the local store, so the extra call is cheap.
 ## Output shaping
 
 - `--format json` (default) prints the full envelope; `--format table` is a
-  compact human view; `--format ndjson` prints the items only, one JSON object
-  per line, without `next` or `has_more`. Use JSON while following cursors.
+  compact human view whose footer shows the `--cursor` to continue with;
+  `--format ndjson` prints the items only on stdout, one JSON object per line,
+  and reports a further page on stderr (see below).
 - `--fields a,b.c` projects the output down to just the fields you need — for
   example `--fields uid,summary,start` when you only want a title list. This
   composes with any format.
@@ -107,21 +137,39 @@ All list commands print the family envelope `{items, next, has_more}`. Only
 one page (`has_more` is always false). For `event list`:
 
 ```bash
-wecom-calendar-cli event list --since 2026-01-01 --until 2027-01-01 --limit 100
+wecom-calendar-cli event list --from 2026-01-01 --to 2027-01-01 --limit 100
 # -> has_more: true, next: "<cursor>"
-wecom-calendar-cli event list --since 2026-01-01 --until 2027-01-01 --limit 100 --cursor "<cursor>"
-wecom-calendar-cli event list --since 2026-01-01 --until 2027-01-01 --all
+wecom-calendar-cli event list --from 2026-01-01 --to 2027-01-01 --limit 100 --cursor "<cursor>"
+wecom-calendar-cli event list --from 2026-01-01 --to 2027-01-01 --all
 ```
 
 - `--limit N` sizes each page (default 200 when omitted). It is a page size,
   not a cap on the total.
 - The cursor is opaque and **bound to the query** — pass the `next` value back
-  verbatim and keep `--since/--until/--calendar` identical across pages, or the
+  verbatim and keep `--from/--to/--calendar` identical across pages, or the
   CLI rejects it with `CURSOR_MISMATCH`. Do not construct a cursor by hand.
-- Give both dates explicitly on every page. A default bound is relative to the
-  current time, so the next call computes a different window and the cursor no
-  longer matches.
+- **Page with absolute `--from`/`--to`.** A window relative to the current time
+  — `--since <duration>`, or a bound written as `now±duration` — resolves to
+  different bounds on every call, so `--cursor` with it is rejected with
+  `CURSOR_RELATIVE_WINDOW`. The error's `next_steps` restate the window as
+  absolute bounds: start again from the first page with those, or read the
+  relative window in one call with `--all`.
+- The default window follows the local day, so a cursor from a call without
+  window flags works for the rest of that day. Pass absolute bounds anyway when
+  paging could run past midnight.
 - `--all` returns every match in one page. Use it when the task needs the
   complete window; otherwise read one page and follow `next` only until you
   have what the question needs. Say so when you stopped before `has_more` was
   false.
+
+With `--format ndjson`, stdout holds only the item lines. After a page that has
+more, one extra line arrives on **stderr**:
+
+```json
+{"_notice":{"next_steps":["Pass next as --cursor to retrieve the next page."],"pagination":{"has_more":true,"next":"<cursor>"}}}
+```
+
+Pass `pagination.next` as `--cursor`, with the same window, to continue. A
+complete result and the unpaginated list commands print no such line, and
+`--fields` does not remove it. Capture stderr alongside stdout whenever you
+page NDJSON; the notice never changes the exit code.

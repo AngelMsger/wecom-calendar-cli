@@ -25,7 +25,7 @@ func defaultGuidance(cat Category) (hint string, steps []string) {
 			[]string{"Re-run wecom-calendar-cli sync, then retry."}
 	case CategoryRateLimit:
 		return "The server is rate limiting requests. Retry after a short wait.",
-			[]string{"Wait and retry; narrow --since/--until or sync one --calendar at a time."}
+			[]string{"Wait and retry; sync one --calendar at a time."}
 	case CategoryNetwork:
 		return "The CalDAV server could not be reached (DNS, TLS or timeout).",
 			[]string{"wecom-calendar-cli doctor", "Check --base-url and network connectivity."}

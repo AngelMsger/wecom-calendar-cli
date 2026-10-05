@@ -4,9 +4,10 @@
 # The default run is fully offline: it drives the built binary against a
 # throwaway config directory and asserts the agent-facing contracts that do not
 # need a server (output on stdout, notices/errors on stderr, exit codes,
-# read-only and --dry-run gates, cursor validation, write outcomes, and the
-# CLI/Skill upgrade loop). Set WECOM_CALENDAR_E2E_LIVE=1 — with real credentials
-# in the environment — to also exercise a live sync.
+# read-only and --dry-run gates, the time-window flags, cursor validation,
+# NDJSON continuation over a seeded store, write outcomes, and the CLI/Skill
+# upgrade loop). Set WECOM_CALENDAR_E2E_LIVE=1 — with real credentials in the
+# environment — to also exercise a live sync.
 set -u -o pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -69,7 +70,7 @@ assert_exit 0 "version"                     -- "$BIN" version
 assert_exit 0 "--help"                      -- "$BIN" --help
 assert_stdout_contains "skill status is JSON" '"' -- "$BIN" skill status
 # event list on an empty store returns a valid, empty envelope (exit 0).
-assert_stdout_contains "empty event list envelope" '"items"' -- "${base[@]}" event list --since 2026-01-01 --until 2026-01-02
+assert_stdout_contains "empty event list envelope" '"items"' -- "${base[@]}" event list --from 2026-01-01 --to 2026-01-02
 # read-only posture: a real write is blocked, but --dry-run still previews.
 assert_exit 5 "meta set blocked under read-only" -- env WECOM_CALENDAR_CLI_READ_ONLY=1 "${base[@]}" meta set uid ns key val
 assert_stdout_contains "meta set --dry-run works under read-only" '"dry_run"' \
@@ -95,6 +96,110 @@ assert_stdout_contains "meta list --value reverse lookup" '"items"' -- "${base[@
 # malformed input is a structured usage error (exit 2), not a crash.
 assert_exit 2 "unknown flag -> usage error"  -- "${base[@]}" event list --nope
 assert_exit 2 "bad --cursor -> usage error"  -- "${base[@]}" event list --cursor not-a-cursor
+
+echo "== time-window contract =="
+# Family vocabulary: --since <duration> looks back from now, --from/--to bound
+# [from, to), --since excludes them, and --to requires --from.
+assert_exit 0 "event list --since <duration>" -- "${base[@]}" event list --since 7d
+assert_exit 0 "a window may reach into the future" -- "${base[@]}" event list --from now --to now+14d
+assert_exit 2 "--since with --from -> usage error" -- "${base[@]}" event list --since 7d --from 2026-01-01
+assert_stderr_contains "window errors use BAD_TIME_RANGE" '"code": "BAD_TIME_RANGE"' \
+  -- "${base[@]}" event list --since 7d --from 2026-01-01
+assert_stderr_contains "--to requires --from" '"message": "--to requires --from"' \
+  -- "${base[@]}" event list --to 2026-01-02
+# The spellings used before the family vocabulary keep working: same result,
+# plus one structured stderr notice per deprecated flag, which can be silenced.
+legacy_err="$WORK/legacy.err"
+legacy_out="$("${base[@]}" event list --since 2026-01-01 --until 2026-01-02 2>"$legacy_err")"
+canonical_out="$("${base[@]}" event list --from 2026-01-01 --to 2026-01-02 2>/dev/null)"
+if [ -n "$legacy_out" ] && [ "$legacy_out" = "$canonical_out" ] \
+   && [ "$(grep -c '"deprecated_flag"' "$legacy_err")" = 2 ] \
+   && grep -qF '"flag":"--since <date>"' "$legacy_err" && grep -qF '"replacement":"--from <date>"' "$legacy_err" \
+   && grep -qF '"flag":"--until"' "$legacy_err" && grep -qF '"replacement":"--to"' "$legacy_err" \
+   && grep -qF 'WECOM_CALENDAR_CLI_NO_DEPRECATION_NOTICE=1' "$legacy_err"; then
+  pass "--since <date> / --until still work and each emits a deprecation notice"
+else
+  bad "deprecated window flags (stdout: $legacy_out, stderr: $(cat "$legacy_err"))"
+fi
+if env WECOM_CALENDAR_CLI_NO_DEPRECATION_NOTICE=1 "${base[@]}" event list --until 2099-01-01 2>&1 >/dev/null \
+     | grep -q '"deprecated_flag"'; then
+  bad "WECOM_CALENDAR_CLI_NO_DEPRECATION_NOTICE did not silence the notice"
+else
+  pass "the deprecation notice can be silenced"
+fi
+assert_exit 0 "--until alone keeps its default lower bound" -- "${base[@]}" event list --until 2099-01-01
+# Paging needs fixed bounds: a cursor on a relative window is refused, and the
+# error restates the window as absolute --from/--to.
+assert_stderr_contains "cursor on a relative window is rejected" '"code": "CURSOR_RELATIVE_WINDOW"' \
+  -- "${base[@]}" event list --since 7d --cursor anything
+assert_stderr_contains "the rejection names absolute bounds" 'wecom-calendar-cli event list --from 20' \
+  -- "${base[@]}" event list --from now-7d --to now+7d --cursor anything
+# expand pins the expansion window with --from/--to and has no look-back.
+assert_stdout_contains "expand --from/--to pins the window" '"window_pinned": true' \
+  -- "${base[@]}" expand --from 2018-01-01 --to 2040-01-01
+assert_stdout_contains "expand --since <date>/--until still pin" '"window_pinned": true' \
+  -- "${base[@]}" expand --since 2018-01-01 --until 2040-01-01
+assert_stderr_contains "expand aliases emit the deprecation notice" '"command":"wecom-calendar-cli expand"' \
+  -- "${base[@]}" expand --since 2018-01-01 --until 2040-01-01
+assert_exit 2 "expand --since <duration> -> usage error" -- "${base[@]}" expand --since 7d
+assert_stderr_contains "expand explains why it has no look-back" 'would drop every future occurrence' \
+  -- "${base[@]}" expand --since 7d
+assert_stdout_contains "expand with no flags clears the pin" '"window_pinned": false' -- "${base[@]}" expand
+
+echo "== pagination and NDJSON continuation over a seeded store =="
+# `event list` is the paginated command, and it reads the derived instances, so
+# a few synthetic occurrences are enough to page for real without a server.
+PAGE_CFG="$WORK/page-cfg"; mkdir -p "$PAGE_CFG"
+if (cd "$ROOT" && go run ./test/seedstore "$PAGE_CFG") 2>"$WORK/seed.log"; then
+  paged=(env WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER=1 "$BIN" --config "$PAGE_CFG" event list --fields uid)
+  # No window flag: this is the default window, whose cursor used to fail with
+  # CURSOR_MISMATCH because its bounds followed the current millisecond.
+  rows="$("${paged[@]}" --format ndjson --limit 2 2>"$WORK/page1.err")"
+  next="$(sed -n 's/.*"pagination":{[^}]*"next":"\([^"]*\)".*/\1/p' "$WORK/page1.err")"
+  if [ "$rows" = $'{"uid":"e2e-a"}\n{"uid":"e2e-b"}' ] && [ -n "$next" ] \
+     && grep -qF '"has_more":true' "$WORK/page1.err" \
+     && grep -qF '"next_steps":["Pass next as --cursor to retrieve the next page."]' "$WORK/page1.err"; then
+    pass "NDJSON keeps projected rows on stdout and the continuation on stderr"
+  else
+    bad "NDJSON first page (stdout: $rows, stderr: $(cat "$WORK/page1.err"))"
+  fi
+  rest="$("${paged[@]}" --format ndjson --limit 2 --cursor "$next" 2>"$WORK/page2.err")"
+  rest_code=$?
+  if [ "$rest_code" = 0 ] && [ "$rest" = $'{"uid":"e2e-c"}\n{"uid":"e2e-ahead"}' ] \
+     && ! grep -q '"pagination"' "$WORK/page2.err"; then
+    pass "the emitted token resumes the next page, and the last page advertises none"
+  else
+    bad "NDJSON resume (exit $rest_code, stdout: $rest, stderr: $(cat "$WORK/page2.err"))"
+  fi
+  everything="$("${paged[@]}" --format ndjson --all 2>"$WORK/all.err")"
+  if [ "$everything" = "$rows"$'\n'"$rest" ] && ! grep -q '"pagination"' "$WORK/all.err"; then
+    pass "--all returns every row with no continuation notice"
+  else
+    bad "NDJSON --all (stdout: $everything, stderr: $(cat "$WORK/all.err"))"
+  fi
+  assert_stdout_contains "JSON envelope carries the same token" "\"next\": \"$next\"" \
+    -- "${paged[@]}" --format json --limit 2
+  assert_stdout_contains "table footer names the same flag" "re-run with --cursor $next" \
+    -- "${paged[@]}" --format table --limit 2
+  # A look-back ends now; the look-ahead forms reach the occurrence two days out.
+  if "${paged[@]}" --format ndjson --since 7d 2>/dev/null | grep -q 'e2e-ahead'; then
+    bad "--since returned an occurrence in the future"
+  else
+    pass "--since <duration> ends now"
+  fi
+  ahead="$("${paged[@]}" --format ndjson --from now --to now+14d 2>/dev/null)"
+  [ "$ahead" = '{"uid":"e2e-ahead"}' ] && pass "--from now --to now+14d looks ahead" \
+                                         || bad "look-ahead window (got: $ahead)"
+  # A relative window is read in one call with --all instead of a cursor.
+  recent="$("${paged[@]}" --format ndjson --since 7d --all 2>"$WORK/recent.err")"
+  if [ "$recent" = $'{"uid":"e2e-a"}\n{"uid":"e2e-b"}\n{"uid":"e2e-c"}' ] && ! grep -q '"pagination"' "$WORK/recent.err"; then
+    pass "--since with --all resolves the relative window once"
+  else
+    bad "--since --all (stdout: $recent)"
+  fi
+else
+  bad "could not seed the store: $(cat "$WORK/seed.log")"
+fi
 
 echo "== metadata write sequences from the Skill =="
 # set overwrites (last write wins), --allow-writes lifts read-only for one call,
@@ -197,7 +302,7 @@ if [ "${WECOM_CALENDAR_E2E_LIVE:-0}" = "1" ]; then
     assert_exit 0 "doctor" -- "${base[@]}" doctor
     assert_exit 0 "sync"   -- "${base[@]}" sync
     assert_stdout_contains "live event list envelope" '"items"' \
-      -- "${base[@]}" event list --since 2026-01-01 --until 2026-12-31
+      -- "${base[@]}" event list --from 2026-01-01 --to 2027-01-01
   fi
 fi
 

@@ -100,6 +100,9 @@ Events carry a free-form, agent-maintained metadata layer for your own
 classification and cross-tool task links. Output is JSON with structured
 errors.
 
+NDJSON lists keep rows on stdout and emit pagination notices on stderr; pass
+the notice&#39;s next value as --cursor to continue.
+
 AGENT NOTE: a companion Skill (&#34;wecom-calendar&#34;) carries the canonical
 usage, safety modes, and setup and is the source of truth for driving this
 CLI. If you are an agent, load that Skill before composing commands. Check
@@ -319,31 +322,46 @@ date&#39;s overrides.</p>
       <h2>wecom-calendar-cli event list</h2>
       <p class="short">List events in a time window from the local store</p>
       <pre>wecom-calendar-cli event list [flags]</pre>
-      <p class="long">List events overlapping [--since, --until) from the local store. Dates
-are YYYY-MM-DD in the display timezone; --since defaults to 30 days ago
-and --until to 30 days ahead. Run `sync` first to populate the store; a
-staleness notice on stderr flags out-of-date data.
+      <p class="long">List events overlapping the half-open window [from, to) from the local
+store. Run `sync` first to populate it; a staleness notice on stderr flags
+out-of-date data.
+
+--since &lt;duration&gt; looks back from now (24h, 7d). --from is an inclusive
+lower bound and --to an exclusive upper bound; each takes YYYY-MM-DD
+(midnight in the display timezone, Asia/Shanghai), an RFC 3339 instant with
+an offset, or now±duration. A calendar looks ahead, so a bound may lie in
+the future: --from now --to now&#43;14d. --since cannot be combined with
+--from/--to, and --to requires --from. With no window flag the window is 30
+days either side of today, on local day boundaries; with --from alone it
+ends 30 days ahead.
 
 Results are paginated: the JSON envelope carries `has_more` and a `next`
-cursor. Pass `--cursor &lt;next&gt;` to fetch the following page, or `--all` to
-return every match in one page (fine here since the query is local).</p>
+cursor, and --format ndjson reports the same on stderr as
+`_notice.pagination`. Pass `--cursor &lt;next&gt;` with the same window to fetch
+the following page, or `--all` to return every match in one page (fine
+here since the query is local). A cursor needs fixed bounds: page with
+absolute --from/--to. A window relative to the current time (--since,
+now±duration) is rejected with --cursor; read it with --all instead.</p>
       <h3>Options</h3>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
         <tr><td><code>--all</code></td><td><code>false</code></td><td>return every match in one page (no pagination)</td></tr>
         <tr><td><code>--calendar</code></td><td></td><td>restrict to one calendar id</td></tr>
-        <tr><td><code>--cursor</code></td><td></td><td>continue from a previous page&#39;s `next` cursor</td></tr>
+        <tr><td><code>--cursor</code></td><td></td><td>continue from a previous page&#39;s `next` cursor; needs the same fixed window</td></tr>
+        <tr><td><code>--from</code></td><td></td><td>window start, inclusive: YYYY-MM-DD, RFC 3339 with an offset, or now-7d (default 30 days ago)</td></tr>
         <tr><td><code>--include-meta</code></td><td><code>false</code></td><td>attach each event&#39;s custom metadata</td></tr>
         <tr><td><code>--limit</code></td><td><code>0</code></td><td>page size (0 = default page size unless --all)</td></tr>
-        <tr><td><code>--since</code></td><td></td><td>start date YYYY-MM-DD (default 30 days ago)</td></tr>
+        <tr><td><code>--since</code></td><td></td><td>look back this far from now, e.g. 24h or 7d (a YYYY-MM-DD value is a deprecated alias of --from)</td></tr>
         <tr><td><code>--status</code></td><td></td><td>keep only these statuses, comma-separated (e.g. confirmed,tentative)</td></tr>
-        <tr><td><code>--until</code></td><td></td><td>end date YYYY-MM-DD, exclusive (default 30 days ahead)</td></tr>
+        <tr><td><code>--to</code></td><td></td><td>window end, exclusive, same forms; may be in the future, e.g. now&#43;14d; requires --from (default 30 days ahead)</td></tr>
+        <tr><td><code>--until</code></td><td></td><td>deprecated alias of --to</td></tr>
         </tbody>
       </table>
-      <h3>Examples</h3><pre>  wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31
-  wecom-calendar-cli event list --calendar 1688853806313356 --format table
-  wecom-calendar-cli event list --since 2026-01-01 --until 2026-12-31 --all</pre>
+      <h3>Examples</h3><pre>  wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01
+  wecom-calendar-cli event list --since 7d
+  wecom-calendar-cli event list --from now --to now+14d --calendar 1688853806313356 --format table
+  wecom-calendar-cli event list --from 2026-01-01 --to 2027-01-01 --all</pre>
     </section>
     
     <section class="cmd" id="wecom-calendar-cli-expand">
@@ -356,21 +374,28 @@ same event across calendars into one occurrence. Pure rebuild; runs
 automatically at the end of `sync`. Never touches your metadata.
 
 Occurrences are expanded over a window (default 2 years back to 1 year
-ahead). Pass --since/--until to widen it when you need to query further
-into the past or future; a query beyond the window prints a coverage
-notice on stderr. A window set that way is remembered and reused by every
-later `sync`, so it survives the next refresh; run `expand` with no flags
-to forget it and return to the rolling default.</p>
+ahead). Pass --from/--to to widen it when you need to query further into
+the past or future; a query beyond the window prints a coverage notice on
+stderr. Each bound takes YYYY-MM-DD (midnight in the display timezone,
+Asia/Shanghai) or an RFC 3339 instant with an offset, and either may be
+given alone. A window set that way is remembered and reused by every later
+`sync`, so it survives the next refresh; run `expand` with no flags to
+forget it and return to the rolling default.
+
+There is no look-back --since here: a window ending now would drop every
+future occurrence.</p>
       <h3>Options</h3>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
-        <tr><td><code>--since</code></td><td></td><td>expansion window start YYYY-MM-DD (default 2 years ago); pins the window for later syncs</td></tr>
-        <tr><td><code>--until</code></td><td></td><td>expansion window end YYYY-MM-DD (default 1 year ahead); pins the window for later syncs</td></tr>
+        <tr><td><code>--from</code></td><td></td><td>expansion window start: YYYY-MM-DD or RFC 3339 with an offset (default 2 years ago); pins the window for later syncs</td></tr>
+        <tr><td><code>--since</code></td><td></td><td>deprecated alias of --from (YYYY-MM-DD only; a look-back duration is rejected)</td></tr>
+        <tr><td><code>--to</code></td><td></td><td>expansion window end, exclusive, same forms (default 1 year ahead); pins the window for later syncs</td></tr>
+        <tr><td><code>--until</code></td><td></td><td>deprecated alias of --to</td></tr>
         </tbody>
       </table>
       <h3>Examples</h3><pre>  wecom-calendar-cli expand
-  wecom-calendar-cli expand --since 2018-01-01 --until 2030-01-01</pre>
+  wecom-calendar-cli expand --from 2018-01-01 --to 2030-01-01</pre>
     </section>
     
     <section class="cmd" id="wecom-calendar-cli-meta">

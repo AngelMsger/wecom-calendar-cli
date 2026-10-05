@@ -77,7 +77,7 @@ The store starts empty; queries return nothing until you sync:
 ```bash
 wecom-calendar-cli sync              # first sync: pulls all calendars + events
 wecom-calendar-cli calendar list     # confirm the calendars landed
-wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31
+wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01
 ```
 
 The first `sync` is a full pull; later runs are incremental (see

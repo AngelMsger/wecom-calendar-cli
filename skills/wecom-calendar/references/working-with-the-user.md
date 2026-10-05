@@ -14,9 +14,10 @@ Sync once when the task starts, again when a read prints
 `{"_notice":{"stale":…}}`, and when the user says the calendar changed — not
 before every read.
 
-`event list` without dates uses a window relative to the current time, so it
-moves between calls. When results have to stay comparable, or you will follow
-a cursor, pass explicit `--since`/`--until` and keep working from the `uid`.
+`event list` without window flags covers 30 days either side of today and
+moves with the date; `--since` and `now±duration` move with the clock. When
+results have to stay comparable, or you will follow a cursor, pass absolute
+`--from`/`--to` and keep working from the `uid`.
 
 ## Continue within the authorization you have
 

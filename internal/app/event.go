@@ -30,36 +30,55 @@ func newEventCmd(s *appState) *cobra.Command {
 }
 
 func newEventListCmd(s *appState) *cobra.Command {
-	var since, until, calendarID, cursor, statusCSV string
+	var window timeFlags
+	var calendarID, cursor, statusCSV string
 	var limit int
 	var all, includeMeta bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List events in a time window from the local store",
-		Long: "List events overlapping [--since, --until) from the local store. Dates\n" +
-			"are YYYY-MM-DD in the display timezone; --since defaults to 30 days ago\n" +
-			"and --until to 30 days ahead. Run `sync` first to populate the store; a\n" +
-			"staleness notice on stderr flags out-of-date data.\n\n" +
+		Long: "List events overlapping the half-open window [from, to) from the local\n" +
+			"store. Run `sync` first to populate it; a staleness notice on stderr flags\n" +
+			"out-of-date data.\n\n" +
+			"--since <duration> looks back from now (24h, 7d). --from is an inclusive\n" +
+			"lower bound and --to an exclusive upper bound; each takes YYYY-MM-DD\n" +
+			"(midnight in the display timezone, Asia/Shanghai), an RFC 3339 instant with\n" +
+			"an offset, or now±duration. A calendar looks ahead, so a bound may lie in\n" +
+			"the future: --from now --to now+14d. --since cannot be combined with\n" +
+			"--from/--to, and --to requires --from. With no window flag the window is 30\n" +
+			"days either side of today, on local day boundaries; with --from alone it\n" +
+			"ends 30 days ahead.\n\n" +
 			"Results are paginated: the JSON envelope carries `has_more` and a `next`\n" +
-			"cursor. Pass `--cursor <next>` to fetch the following page, or `--all` to\n" +
-			"return every match in one page (fine here since the query is local).",
-		Example: "  wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31\n" +
-			"  wecom-calendar-cli event list --calendar 1688853806313356 --format table\n" +
-			"  wecom-calendar-cli event list --since 2026-01-01 --until 2026-12-31 --all",
+			"cursor, and --format ndjson reports the same on stderr as\n" +
+			"`_notice.pagination`. Pass `--cursor <next>` with the same window to fetch\n" +
+			"the following page, or `--all` to return every match in one page (fine\n" +
+			"here since the query is local). A cursor needs fixed bounds: page with\n" +
+			"absolute --from/--to. A window relative to the current time (--since,\n" +
+			"now±duration) is rejected with --cursor; read it with --all instead.",
+		Example: "  wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01\n" +
+			"  wecom-calendar-cli event list --since 7d\n" +
+			"  wecom-calendar-cli event list --from now --to now+14d --calendar 1688853806313356 --format table\n" +
+			"  wecom-calendar-cli event list --from 2026-01-01 --to 2027-01-01 --all",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			loc := displayLoc()
-			sinceT, untilT, err := parseWindow(since, until, loc)
+			w, deprecated, err := window.eventWindow(time.Now(), loc)
+			emitDeprecations(cmd, deprecated)
 			if err != nil {
 				return err
 			}
-			sinceMs, untilMs := sinceT.UTC().UnixMilli(), untilT.UTC().UnixMilli()
+			fromMs, toMs := w.from.UTC().UnixMilli(), w.to.UTC().UnixMilli()
 			// The cursor is bound to the query filters via a digest, so reusing a
 			// cursor from a different window/calendar is rejected rather than
 			// silently skipping data.
-			digest := filterDigest(sinceMs, untilMs, calendarID)
+			digest := filterDigest(fromMs, toMs, calendarID)
 			var after *store.InstanceCursor
 			if cursor != "" {
+				// A relative window resolves to different bounds on every call, so
+				// its cursor could never match; say so instead of CURSOR_MISMATCH.
+				if w.relative {
+					return relativeWindowCursorError(w, loc)
+				}
 				if after, err = decodeCursor(cursor, digest); err != nil {
 					return err
 				}
@@ -80,11 +99,11 @@ func newEventListCmd(s *appState) *cobra.Command {
 			}
 			defer st.Close()
 			s.staleNotice(st)
-			s.coverageNotice(st, sinceT, untilT)
+			s.coverageNotice(st, w.from, w.to)
 
 			// Query the expanded instances so recurring events appear on every
 			// occurrence in the window (deduped across calendars).
-			rows, nextCur, err := st.QueryInstances(sinceMs, untilMs, calendarID, splitCSV(statusCSV), after, pageLimit)
+			rows, nextCur, err := st.QueryInstances(fromMs, toMs, calendarID, splitCSV(statusCSV), after, pageLimit)
 			if err != nil {
 				return err
 			}
@@ -100,14 +119,13 @@ func newEventListCmd(s *appState) *cobra.Command {
 			return s.emitList(rows, pageInfo{Next: next, HasMore: nextCur != nil})
 		},
 	}
+	addEventTimeFlags(cmd, &window)
 	f := cmd.Flags()
-	f.StringVar(&since, "since", "", "start date YYYY-MM-DD (default 30 days ago)")
-	f.StringVar(&until, "until", "", "end date YYYY-MM-DD, exclusive (default 30 days ahead)")
 	f.StringVar(&calendarID, "calendar", "", "restrict to one calendar id")
 	f.StringVar(&statusCSV, "status", "", "keep only these statuses, comma-separated (e.g. confirmed,tentative)")
 	f.BoolVar(&includeMeta, "include-meta", false, "attach each event's custom metadata")
 	f.IntVar(&limit, "limit", 0, "page size (0 = default page size unless --all)")
-	f.StringVar(&cursor, "cursor", "", "continue from a previous page's `next` cursor")
+	f.StringVar(&cursor, "cursor", "", "continue from a previous page's `next` cursor; needs the same fixed window")
 	f.BoolVar(&all, "all", false, "return every match in one page (no pagination)")
 	return cmd
 }
@@ -182,7 +200,7 @@ func newEventGetCmd(s *appState) *cobra.Command {
 			if detail == nil {
 				return cerrors.Newf(cerrors.CategoryNotFound, "EVENT_NOT_FOUND",
 					"no live event with uid %q in the local store", uid).
-					WithHint("List events with `wecom-calendar-cli event list --since <date> --until <date>` to find a uid, or run `sync` if the store is empty.")
+					WithHint("List events with `wecom-calendar-cli event list --from <date> --to <date>` to find a uid, or run `sync` if the store is empty.")
 			}
 			markSelf(detail.Attendees, s.cfg().Auth.Username)
 			if includeMeta {
@@ -218,8 +236,8 @@ func markSelf(attendees []store.AttendeeOut, selfUsername string) {
 // filterDigest binds a cursor to the query that produced it (window + calendar),
 // so a cursor cannot be replayed against a different filter set — which, with a
 // raw offset, would silently skip or duplicate rows.
-func filterDigest(sinceMs, untilMs int64, calID string) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%d|%d|%s", sinceMs, untilMs, calID)))
+func filterDigest(fromMs, toMs int64, calID string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d|%d|%s", fromMs, toMs, calID)))
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -251,46 +269,15 @@ func decodeCursor(s, wantDigest string) (*store.InstanceCursor, error) {
 	if parts[3] != wantDigest {
 		return nil, cerrors.New(cerrors.CategoryUsage, "CURSOR_MISMATCH",
 			"this --cursor was issued for a different query window or calendar").
-			WithHint("Restart paging without --cursor, keeping --since/--until/--calendar identical across pages.")
+			WithHint("Restart paging without --cursor, keeping --from/--to/--calendar identical across pages. " +
+				"A default bound follows the local day, so pass absolute --from/--to when paging may run past midnight.")
 	}
 	return &store.InstanceCursor{StartMs: ms, UID: parts[1], Key: parts[2]}, nil
 }
 
-// parseWindow resolves the --since/--until flags to a time range, applying
-// defaults of now-30d .. now+30d. The CLI absorbs the date math so agents never
-// hand-compute timestamps.
-func parseWindow(since, until string, loc *time.Location) (time.Time, time.Time, error) {
-	now := time.Now().In(loc)
-	start := now.AddDate(0, 0, -30)
-	end := now.AddDate(0, 0, 30)
-	if since != "" {
-		t, err := time.ParseInLocation("2006-01-02", since, loc)
-		if err != nil {
-			return time.Time{}, time.Time{}, badDate("since", since)
-		}
-		start = t
-	}
-	if until != "" {
-		t, err := time.ParseInLocation("2006-01-02", until, loc)
-		if err != nil {
-			return time.Time{}, time.Time{}, badDate("until", until)
-		}
-		end = t
-	}
-	if !end.After(start) {
-		return time.Time{}, time.Time{}, cerrors.New(cerrors.CategoryUsage, "BAD_WINDOW",
-			"--until must be after --since")
-	}
-	return start, end, nil
-}
-
-func badDate(flag, val string) error {
-	return cerrors.Newf(cerrors.CategoryUsage, "BAD_DATE",
-		"invalid --%s date %q, expected YYYY-MM-DD", flag, val)
-}
-
-// displayLoc is the timezone used to render event times. Fixed to Asia/Shanghai
-// for now; a config field will drive it later.
+// displayLoc is the timezone used to render event times and to read a
+// date-only window bound. Fixed to Asia/Shanghai for now; a config field will
+// drive it later.
 func displayLoc() *time.Location {
 	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
 		return loc

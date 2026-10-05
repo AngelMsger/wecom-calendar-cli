@@ -18,7 +18,7 @@ npm install -g @angelmsger/wecom-calendar-cli
 wecom-calendar-cli config init       # CalDAV server URL + WeCom email + app password
 wecom-calendar-cli skill install     # deploy the companion agent Skill
 wecom-calendar-cli sync              # pull calendars + events into the local store
-wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31
+wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01
 ```
 
 Installing this package downloads the prebuilt binary for your platform from the

@@ -73,6 +73,8 @@ func newRootCmdWithState() (*cobra.Command, *appState) {
 			"Events carry a free-form, agent-maintained metadata layer for your own\n" +
 			"classification and cross-tool task links. Output is JSON with structured\n" +
 			"errors.\n\n" +
+			"NDJSON lists keep rows on stdout and emit pagination notices on stderr; pass\n" +
+			"the notice's next value as --cursor to continue.\n\n" +
 			"AGENT NOTE: a companion Skill (\"wecom-calendar\") carries the canonical\n" +
 			"usage, safety modes, and setup and is the source of truth for driving this\n" +
 			"CLI. If you are an agent, load that Skill before composing commands. Check\n" +

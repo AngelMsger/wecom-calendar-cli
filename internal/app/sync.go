@@ -93,7 +93,7 @@ func newSyncCmd(s *appState) *cobra.Command {
 				return err
 			}
 			// Rebuild the expanded/deduped instances so queries are ready. The
-			// window is whatever `expand --since/--until` pinned, falling back to
+			// window is whatever `expand --from/--to` pinned, falling back to
 			// the rolling default — rebuilding on the default unconditionally would
 			// silently discard a window the user widened, which is exactly what the
 			// coverage notice tells them to do about a short window.

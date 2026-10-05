@@ -89,7 +89,7 @@ Checked against wecom-cli 1.3.2 on 2026-10-05.
 
 Recurring events are expanded from two years back to one year ahead by default.
 To query them further out, widen the window once with
-`wecom-calendar-cli expand --since <date> --until <date>`; later syncs keep it.
+`wecom-calendar-cli expand --from <date> --to <date>`; later syncs keep it.
 
 In practice, reach for `wecom-cli` to change something or to work with the rest
 of WeCom, and for `wecom-calendar-cli` to look back, query offline, and
@@ -163,7 +163,8 @@ wecom-calendar-cli doctor        # verify configuration, credentials, connectivi
 
 wecom-calendar-cli sync                                              # pull into the local store
 wecom-calendar-cli calendar list                                    # what landed
-wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31  # query a window
+wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01      # query a window
+wecom-calendar-cli event list --from now --to now+14d                # or look ahead
 
 # annotate an event (uid comes from an `event list` item) and link it to a task
 wecom-calendar-cli meta set <uid> task feishu_project "6949886165" --source agent
@@ -189,9 +190,9 @@ calendar data and is never committed.
 |---------|---------|
 | `sync` | pull CalDAV changes into the local store (incremental; `--full`, `--calendar`, `--dry-run`) |
 | `calendar list` | list calendars from the store (`--refresh` re-lists from the server) |
-| `event list` | query events in a `--since`/`--until` window (`--calendar`, `--limit`) |
+| `event list` | query events in a `--from`/`--to` window, or look back with `--since 7d` (`--calendar`, `--limit`); see [Time windows](#time-windows) |
 | `event get` | read one event in full by UID: description, location, organizer and attendees (`--occurrence`, `--include-meta`) |
-| `expand` | rebuild recurring-event occurrences; `--since`/`--until` widen the expansion window and pin it for later syncs |
+| `expand` | rebuild recurring-event occurrences; `--from`/`--to` widen the expansion window and pin it for later syncs |
 | `meta set` / `get` / `list` / `delete` | maintain the agent-owned metadata layer, keyed by event UID |
 | `whoami` | show the configured account, the identity attendee lists flag as `is_self` |
 | `config` / `auth` / `doctor` | setup, credentials and diagnostics |
@@ -203,7 +204,33 @@ calendar data and is never committed.
 In the default JSON output, list commands return a `{items, next, has_more}`
 envelope; pass `--cursor` with a prior page's `next` to read the following page,
 or `--all` to fetch every page. `--format ndjson` instead streams the items
-themselves, one JSON object per line.
+themselves on stdout, one JSON object per line, and reports a further page on
+stderr as `{"_notice":{"pagination":{"next":…,"has_more":true},…}}` — keep
+stderr when you page NDJSON.
+
+### Time windows
+
+`event list` follows the time-window vocabulary of its sibling CLIs:
+`--since <duration>` looks back from now (`24h`, `7d`), `--from` is an inclusive
+lower bound and `--to` an exclusive upper bound. `--since` cannot be combined
+with `--from`/`--to`, and `--to` requires `--from`. Because a calendar looks
+ahead, three things differ from the siblings:
+
+- A bound may lie in the future, and `now+14d` is a valid instant:
+  `--from now --to now+14d`.
+- With no window flag the window is 30 days either side of today, on local day
+  boundaries; with `--from` alone it ends 30 days ahead rather than now.
+- A date such as `2026-07-01` means midnight in the display timezone
+  (Asia/Shanghai), not UTC. An RFC 3339 instant with an offset is exact.
+
+A cursor needs fixed bounds, so page with absolute `--from`/`--to`. A window
+relative to the current time (`--since`, `now±duration`) is rejected with
+`--cursor`; read it in one call with `--all`.
+
+`--until`, and `--since` with a date, are deprecated aliases of `--to` and
+`--from` on both `event list` and `expand`. They keep working and print a
+`{"_notice":{"deprecated_flag":{…}}}` line on stderr; set
+`WECOM_CALENDAR_CLI_NO_DEPRECATION_NOTICE=1` to silence it.
 
 ## The local store
 

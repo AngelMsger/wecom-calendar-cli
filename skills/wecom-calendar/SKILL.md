@@ -1,6 +1,6 @@
 ---
 name: wecom-calendar
-version: 0.2.0
+version: 0.3.0
 description: "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query it and maintain an agent-owned metadata layer (event classification, external task links). Use when the user mentions a WeCom / 企业微信 calendar, schedule or 日程 and asks to sync or refresh calendar data, list calendars, see or find events in a date range — including history more than 30 days from today, which the official wecom-cli cannot list — read one event's full detail (description, location, organizer, attendees), or annotate, classify, tag or link an event to a task (e.g. a Feishu project item) and read those annotations. It never changes the calendar; creating, editing or cancelling events belongs to wecom-cli. Queries read the local store, so run `sync` first and re-sync when a read prints `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor read-only mode (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only; --allow-writes overrides) and accept --dry-run."
 metadata:
   requires:
@@ -24,10 +24,10 @@ the user may have both installed. They are complements — route by the request:
   today, when the user wants offline or repeated queries, and for annotations
   (`meta`). `wecom-cli` cannot list schedules outside that range, even for
   events the user can see in the WeCom client; CalDAV has no such limit. Pass
-  `--since`/`--until` explicitly, because `event list` itself defaults to 30
+  `--from`/`--to` explicitly, because `event list` itself defaults to 30
   days either side of today. For recurring events more than two years back or
   one year ahead, widen coverage first with
-  `expand --since <date> --until <date>` (see
+  `expand --from <date> --to <date>` (see
   [querying.md](references/querying.md)).
 - **Use `wecom-cli`** to change the calendar: create, update or cancel an
   event, manage attendees, or find when several members are free. This CLI is
@@ -66,9 +66,10 @@ Do not reach for a non-existent "live query" flag: the freshness contract is
   `--dry-run` to preview). See [syncing.md](references/syncing.md).
 - User wants to **see which calendars exist** → `calendar list`
   (`--refresh` to re-list from the server first).
-- User wants to **find events in a date range** → `event list --since
-  YYYY-MM-DD --until YYYY-MM-DD` (`--calendar`, `--status`, `--include-meta`).
-  See [querying.md](references/querying.md).
+- User wants to **find events in a date range** → `event list --from
+  YYYY-MM-DD --to YYYY-MM-DD` (`--calendar`, `--status`, `--include-meta`);
+  "the last week" → `--since 7d`; "the next two weeks" →
+  `--from now --to now+14d`. See [querying.md](references/querying.md).
 - User wants **one event's full detail — description, location, organizer,
   attendees, or who they meet with** → find the uid with `event list`, then
   `event get <uid>` (attendees are flagged `is_self`; `--include-meta` attaches
@@ -93,12 +94,12 @@ wecom-calendar-cli sync [--full] [--calendar id] [--dry-run] [--progress auto|no
                                        # CalDAV -> local SQLite (incremental); bounded progress on stderr
 wecom-calendar-cli calendar list [--refresh]
                                        # calendars from the store (--refresh: server)
-wecom-calendar-cli event list --since YYYY-MM-DD --until YYYY-MM-DD \
+wecom-calendar-cli event list [--since 7d | --from <instant> [--to <instant>]] \
     [--calendar id] [--status s] [--include-meta] [--limit N] [--cursor c|--all]
-                                       # events from the store, in a window
+                                       # events from the store, in a window [from, to)
 wecom-calendar-cli event get <uid> [--occurrence key] [--include-meta]
                                        # one event in full: description, organizer, attendees(is_self)
-wecom-calendar-cli expand [--since YYYY-MM-DD] [--until YYYY-MM-DD]
+wecom-calendar-cli expand [--from YYYY-MM-DD] [--to YYYY-MM-DD]
                                        # rebuild recurring occurrences; flags widen and pin the window
 wecom-calendar-cli whoami              # the configured account (your identity)
 wecom-calendar-cli meta set <uid> <ns> <key> <value> [--source s] [--dry-run]
@@ -128,14 +129,22 @@ still resolves after tomorrow's `sync`. Always take the `uid` from an
 
 - **stdout is data, stderr is notices/errors.** A successful pipeline parses
   stdout cleanly; `_notice` lines (stale store, update available, flag
-  corrections) and errors go to stderr only.
+  corrections, deprecated flags, NDJSON pagination) and errors go to stderr
+  only.
 - **List envelope.** `calendar list`, `event list` and `meta list` return
   `{items, next, has_more}`. One page per call; when `has_more` is true, pass
   `--cursor` with the `next` value for the following page, or `--all` to walk
   every page, or `--limit N` to size each request.
 - `--format json|table|ndjson`; `--fields a,b.c` projects output down to the
-  fields you need. `ndjson` prints the items only, one JSON object per line,
-  without `next` or `has_more` — use JSON while following cursors.
+  fields you need. `ndjson` prints the items only on stdout, one JSON object
+  per line. When more pages exist it adds one stderr line,
+  `{"_notice":{"next_steps":[…],"pagination":{"has_more":true,"next":"…"}}}`;
+  pass that `next` as `--cursor`. Keep stderr when you page NDJSON — no such
+  line means the result is complete.
+- **A cursor needs a fixed window.** Page with absolute `--from`/`--to`,
+  repeated on every call. `--since` and `now±duration` move with the clock and
+  are rejected with `--cursor` (`CURSOR_RELATIVE_WINDOW`); read such a window
+  in one call with `--all`.
 - **Read what the question needs.** Pass a window sized to the request and
   stop paging once you have enough. `--limit` is a page size, not a total;
   `--all` is for a complete inventory of the window.
@@ -170,7 +179,7 @@ event details the question did not need.
 The full rules, including how to preserve existing annotations, are in
 [working-with-the-user.md](references/working-with-the-user.md).
 
-## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.2.0`
+## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.3.0`
 
 Once you have loaded this Skill, export that exact value in the environment
 used to run the CLI. The CLI compares it with the embedded Skill version and

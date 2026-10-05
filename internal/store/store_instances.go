@@ -16,7 +16,7 @@ const (
 )
 
 // Metadata keys recording an explicitly pinned expansion window. `expand` with
-// --since/--until sets them; `sync` honors them so a widened (or narrowed)
+// --from/--to sets them; `sync` honors them so a widened (or narrowed)
 // window survives the automatic rebuild at the end of every sync instead of
 // silently reverting to the rolling default. `expand` with no flags clears them.
 const (

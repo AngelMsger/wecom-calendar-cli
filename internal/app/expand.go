@@ -5,12 +5,11 @@ import (
 
 	expandpkg "github.com/angelmsger/wecom-calendar-cli/internal/expand"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
-	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
 func newExpandCmd(s *appState) *cobra.Command {
-	var since, until string
+	var window timeFlags
 	cmd := &cobra.Command{
 		Use:   "expand",
 		Short: "Rebuild the expanded event-instances view",
@@ -19,35 +18,24 @@ func newExpandCmd(s *appState) *cobra.Command {
 			"same event across calendars into one occurrence. Pure rebuild; runs\n" +
 			"automatically at the end of `sync`. Never touches your metadata.\n\n" +
 			"Occurrences are expanded over a window (default 2 years back to 1 year\n" +
-			"ahead). Pass --since/--until to widen it when you need to query further\n" +
-			"into the past or future; a query beyond the window prints a coverage\n" +
-			"notice on stderr. A window set that way is remembered and reused by every\n" +
-			"later `sync`, so it survives the next refresh; run `expand` with no flags\n" +
-			"to forget it and return to the rolling default.",
+			"ahead). Pass --from/--to to widen it when you need to query further into\n" +
+			"the past or future; a query beyond the window prints a coverage notice on\n" +
+			"stderr. Each bound takes YYYY-MM-DD (midnight in the display timezone,\n" +
+			"Asia/Shanghai) or an RFC 3339 instant with an offset, and either may be\n" +
+			"given alone. A window set that way is remembered and reused by every later\n" +
+			"`sync`, so it survives the next refresh; run `expand` with no flags to\n" +
+			"forget it and return to the rolling default.\n\n" +
+			"There is no look-back --since here: a window ending now would drop every\n" +
+			"future occurrence.",
 		Example: "  wecom-calendar-cli expand\n" +
-			"  wecom-calendar-cli expand --since 2018-01-01 --until 2030-01-01",
+			"  wecom-calendar-cli expand --from 2018-01-01 --to 2030-01-01",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			loc := displayLoc()
-			pinned := since != "" || until != ""
-			startT, endT := expandWindowStart(), expandWindowEnd()
-			if since != "" {
-				t, err := time.ParseInLocation("2006-01-02", since, loc)
-				if err != nil {
-					return badDate("since", since)
-				}
-				startT = t
-			}
-			if until != "" {
-				t, err := time.ParseInLocation("2006-01-02", until, loc)
-				if err != nil {
-					return badDate("until", until)
-				}
-				endT = t
-			}
-			if !endT.After(startT) {
-				return cerrors.New(cerrors.CategoryUsage, "BAD_WINDOW",
-					"--until must be after --since")
+			startT, endT, pinned, deprecated, err := window.expandWindow(time.Now(), loc)
+			emitDeprecations(cmd, deprecated)
+			if err != nil {
+				return err
 			}
 			st, err := s.openStore()
 			if err != nil {
@@ -75,9 +63,7 @@ func newExpandCmd(s *appState) *cobra.Command {
 			return s.emit(out)
 		},
 	}
-	f := cmd.Flags()
-	f.StringVar(&since, "since", "", "expansion window start YYYY-MM-DD (default 2 years ago); pins the window for later syncs")
-	f.StringVar(&until, "until", "", "expansion window end YYYY-MM-DD (default 1 year ahead); pins the window for later syncs")
+	addExpandTimeFlags(cmd, &window)
 	return cmd
 }
 
@@ -89,7 +75,7 @@ func expandWindowStart() time.Time { return time.Now().AddDate(-2, 0, 0) }
 func expandWindowEnd() time.Time   { return time.Now().AddDate(1, 0, 0) }
 
 // resolveExpandWindow returns the window the next rebuild should cover: the
-// window pinned by an earlier `expand --since/--until` if one is recorded, else
+// window pinned by an earlier `expand --from/--to` if one is recorded, else
 // the rolling default. `sync` uses it so its automatic rebuild does not quietly
 // discard a window the user deliberately chose — the coverage notice tells them
 // to widen with `expand`, and the Skill tells agents to re-sync, so without this

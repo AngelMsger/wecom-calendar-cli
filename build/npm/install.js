@@ -123,7 +123,7 @@ function welcomeText() {
     '',
     'Everyday use:',
     '  wecom-calendar-cli sync',
-    '  wecom-calendar-cli event list --since 2026-07-01 --until 2026-07-31',
+    '  wecom-calendar-cli event list --from 2026-07-01 --to 2026-08-01',
     '  wecom-calendar-cli --help',
     '',
     'Docs: https://angelmsger.github.io/wecom-calendar-cli/',

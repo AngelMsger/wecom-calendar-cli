@@ -31,7 +31,7 @@ instead.
 |------|----------|--------------------|
 | 0 | — | success |
 | 1 | internal | unexpected bug; re-run with `--verbose` |
-| 2 | usage | bad flags/arguments (e.g. missing `--since`/`--until`); check `--help` |
+| 2 | usage | bad flags/arguments (e.g. `--to` without `--from`); read `next_steps`, check `--help` |
 | 3 | config | config/credential resolution failed; inspect `code` and `recovery` before reconfiguring |
 | 4 | auth | credentials rejected (401); run `auth status`, re-`config init` |
 | 5 | permission | valid login, no access (403), or local `READONLY_BLOCKED` |
@@ -100,6 +100,25 @@ Two results look like failures and are not:
   blocked by read-only mode. Use `--allow-writes` only when the current task
   authorizes that write, or `--dry-run` to preview. See
   [safety-modes.md](safety-modes.md).
+- **`BAD_TIME_RANGE`** (usage, 2) → the window flags of `event list` or
+  `expand` do not form a usable window: `--since` combined with `--from`/`--to`,
+  `--to` without `--from`, an end that is not after the start, an unreadable
+  value, or a look-back `--since` on `expand`. The `hint` restates the rules and
+  `next_steps` are working examples. See
+  [querying.md](querying.md#list-events-in-a-window).
+- **`CURSOR_RELATIVE_WINDOW`** (usage, 2) → `--cursor` was passed with a window
+  that moves with the clock (`--since`, `now±duration`). Restart from the first
+  page with the absolute `--from`/`--to` in `next_steps`, or use `--all`.
+- **`CURSOR_MISMATCH`** / **`BAD_CURSOR`** (usage, 2) → the cursor belongs to a
+  different window or calendar, or is not a cursor. Restart without `--cursor`
+  and keep `--from/--to/--calendar` identical across pages.
+- **Deprecated-flag notice** (not an error) → `--until`, or `--since` with a
+  date, printed `{"_notice":{"deprecated_flag":{…}}}` on **stderr**. The
+  command still ran; switch to the `replacement` it names (`--to`, `--from`).
+  `WECOM_CALENDAR_CLI_NO_DEPRECATION_NOTICE=1` silences it.
+- **Pagination notice** (not an error) → with `--format ndjson`, a page that has
+  more prints `{"_notice":{"pagination":{…}}}` on **stderr**; pass its `next`
+  as `--cursor`.
 - **Stale-store notice** (not an error) → printed on **stderr** as
   `{"_notice":{"stale":…}}` when a read runs against a store that is behind the
   server. It does not fail the command; re-run `sync` and query again for

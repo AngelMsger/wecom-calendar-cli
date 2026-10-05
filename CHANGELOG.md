@@ -24,6 +24,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failure's category, exit code and cause, sets `retryable: false`, and gives a
   read-only `meta get` recovery command. Previously the command exited with a
   bare usage error although the store had changed.
+- **The family time-window flags on `event list`.** `--from <instant>` is an
+  inclusive lower bound, `--to <instant>` an exclusive upper bound, and
+  `--since <duration>` (`24h`, `7d`) a look-back ending now. `--since` cannot
+  be combined with `--from`/`--to`, and `--to` requires `--from`. An instant is
+  a date, an RFC 3339 timestamp with an offset, or `now`, `now-7d`, `now+14d`.
+  Because a calendar looks ahead, a bound may lie in the future, `--from` alone
+  ends 30 days ahead instead of now, and a date means midnight in the display
+  timezone (Asia/Shanghai) rather than UTC.
+- **`expand --from/--to`.** The expansion window is pinned with the same two
+  flags. Either may be given alone; a look-back `--since <duration>` is
+  rejected, because a window ending now would drop every future occurrence.
+- **NDJSON continuation metadata.** With `--format ndjson`, a page that has
+  more now prints one compact line on stderr after its rows:
+  `{"_notice":{"pagination":{"next":…,"has_more":true},"next_steps":[…]}}`.
+  stdout still holds item records only, `--fields` does not remove the notice,
+  and complete or unpaginated results print none. Previously an NDJSON page
+  gave no sign that more rows existed.
+- **`CURSOR_RELATIVE_WINDOW`.** `--cursor` with a window relative to the
+  current time (`--since <duration>`, or a bound written as `now±duration`) is
+  rejected with this usage error, whose `next_steps` restate the window as
+  absolute `--from`/`--to`. Such a window resolves to different bounds on every
+  call, so its cursor could only ever fail with `CURSOR_MISMATCH`. `--all`
+  reads a relative window in one call.
+- **`pkg/timeutil`.** The window parser is importable, as in `prometheus-cli`.
 
 ### Changed
 
@@ -42,6 +66,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its evidence and limits. The rules live in one reference,
   `working-with-the-user.md`, linked from the entry points. Skill bumped to
   `0.2.0`.
+- **Window errors use `BAD_TIME_RANGE`.** An unreadable or contradictory
+  window on `event list` or `expand` now returns the family's `BAD_TIME_RANGE`
+  usage error with a hint and runnable examples. It replaces `BAD_DATE` and
+  `BAD_WINDOW`; the category and exit code (usage, 2) are unchanged.
+- **The default `event list` window is aligned to the local day.** It still
+  covers 30 days either side of now, but now runs from midnight 30 days ago to
+  the end of the day 30 days ahead in the display timezone, so it is a superset
+  of the previous window and identical for every call made on one day.
+- **Companion Skill follows the new flags.** Every example uses `--from`/`--to`,
+  and the Skill documents `--since <duration>`, look-ahead windows, the local
+  meaning of a date, paging with fixed bounds and the NDJSON pagination notice.
+  Skill bumped to `0.3.0`.
+
+### Deprecated
+
+- **`--until`** on `event list` and `expand` is a deprecated alias of `--to`.
+- **`--since YYYY-MM-DD`** on `event list` and `expand` is a deprecated alias
+  of `--from`. On `event list`, `--since` now takes a duration.
+- **Deprecation notices.** Both aliases keep working and select the same window
+  as their replacements — including `--until` on its own, which keeps its
+  default lower bound although `--to` requires `--from`. Each use prints one
+  `{"_notice":{"deprecated_flag":{…}}}` line on stderr naming the flag and its
+  replacement. Set `WECOM_CALENDAR_CLI_NO_DEPRECATION_NOTICE=1` to silence it.
 
 ### Fixed
 
@@ -54,9 +101,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeps that type, so numeric text is stored as a number unless passed as a
   quoted JSON string; a missing metadata entry is an empty result rather than a
   `not_found` error; `meta delete` examples include the `--yes` an agent needs;
-  `doctor` is described by the checks it runs; and a cursor needs explicit
-  `--since`/`--until` on every page because a default bound moves with the
-  clock.
+  `doctor` is described by the checks it runs; and a cursor needs the same
+  absolute window on every page.
+- **The cursor of a default-window `event list` page.** With no window flag the
+  bounds were relative to the current millisecond, so the next call computed a
+  different window and the `next` cursor of the first page always failed with
+  `CURSOR_MISMATCH`. The default bounds now sit on local midnight, and the
+  cursor resumes for the rest of the day.
+- **Rate-limit recovery step.** It told callers to narrow `--since`/`--until`,
+  flags that `sync` — the only command that reaches the server in bulk — never
+  had. It now says to sync one `--calendar` at a time.
 
 ## [0.2.3] - 2026-10-05
 

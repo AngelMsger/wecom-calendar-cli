@@ -110,7 +110,7 @@ routine sync.
 ## The recurrence rebuild at the end of a sync
 
 Every `sync` finishes by rebuilding the expanded occurrences that `event list`
-reads. It uses the window pinned by an earlier `expand --since/--until` if there
+reads. It uses the window pinned by an earlier `expand --from/--to` if there
 is one, and the rolling default (2 years back to 1 year ahead) otherwise — so
 widening coverage once survives every later sync instead of reverting. The sync
 result reports the window it used as `covered_from` / `covered_to` plus

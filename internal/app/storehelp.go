@@ -100,7 +100,7 @@ func (s *appState) truncationNotice(res expandpkg.Result) {
 				"limit":        expandpkg.MaxInstancesPerEvent,
 				"sample_uids":  truncatedSample(res.Truncated),
 				"message":      "some recurring events hit the per-event occurrence limit; their later occurrences are missing from this window",
-				"how_to_avoid": "narrow the expansion window with `wecom-calendar-cli expand --since <date> --until <date>`",
+				"how_to_avoid": "narrow the expansion window with `wecom-calendar-cli expand --from <date> --to <date>`",
 			},
 		},
 	})
@@ -110,7 +110,7 @@ func (s *appState) truncationNotice(res expandpkg.Result) {
 // window the derived instances were expanded over. Recurring occurrences past
 // the expansion window are absent, so without this an out-of-range query would
 // look empty rather than under-covered. It never touches stdout.
-func (s *appState) coverageNotice(st *store.Store, since, until time.Time) {
+func (s *appState) coverageNotice(st *store.Store, from, to time.Time) {
 	startStr, ok1, err1 := st.GetSyncMeta(store.MetaCoveredStartMs)
 	endStr, ok2, err2 := st.GetSyncMeta(store.MetaCoveredEndMs)
 	if err1 != nil || err2 != nil || !ok1 || !ok2 {
@@ -121,8 +121,8 @@ func (s *appState) coverageNotice(st *store.Store, since, until time.Time) {
 	if e1 != nil || e2 != nil {
 		return
 	}
-	qStart := since.UTC().UnixMilli()
-	qEnd := until.UTC().UnixMilli()
+	qStart := from.UTC().UnixMilli()
+	qEnd := to.UTC().UnixMilli()
 	if qStart >= coveredStart && qEnd <= coveredEnd {
 		return // fully within the expanded window
 	}
@@ -132,7 +132,7 @@ func (s *appState) coverageNotice(st *store.Store, since, until time.Time) {
 				"covered_from": time.UnixMilli(coveredStart).UTC().Format(time.RFC3339),
 				"covered_to":   time.UnixMilli(coveredEnd).UTC().Format(time.RFC3339),
 				"message": "query window extends beyond expanded coverage; recurring events outside it are omitted. " +
-					"Widen it with `wecom-calendar-cli expand --since <date> --until <date>`.",
+					"Widen it with `wecom-calendar-cli expand --from <date> --to <date>`.",
 			},
 		},
 	})

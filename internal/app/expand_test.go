@@ -37,7 +37,7 @@ func TestResolveExpandWindowDefaultsWhenUnpinned(t *testing.T) {
 
 // TestExpandPinSurvivesResolve is the regression guard for the bug where every
 // `sync` silently reverted a widened expansion window: once `expand
-// --since/--until` pins a window, the window a later sync resolves must be that
+// --from/--to` pins a window, the window a later sync resolves must be that
 // window, not the rolling default.
 func TestExpandPinSurvivesResolve(t *testing.T) {
 	st := expandTestStore(t)
