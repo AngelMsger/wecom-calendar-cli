@@ -45,9 +45,11 @@ in `build/npm/`.
   (read-only, `--dry-run`, the destructive-confirmation gate, the time-window
   flags and their deprecated aliases, cursor handling, NDJSON continuation,
   exit codes, write outcomes, the metadata sequences the Skill documents, and
-  the CLI/Skill upgrade loop). No network or credentials required; it needs the
-  Go toolchain to build one version-pinned binary and to seed a scratch store
-  with `test/seedstore`.
+  the CLI/Skill upgrade loop). It ends with `scripts/e2e-setup.sh`: team
+  presets, the acquisition guide and the login guards, run with an empty
+  environment and a scratch `HOME`. No network or credentials required; it
+  needs the Go toolchain to build one version-pinned binary and to seed a
+  scratch store with `test/seedstore`.
 - `make e2e-live` — additionally exercise a real sync; set
   `WECOM_CALENDAR_SERVER` / `WECOM_CALENDAR_USERNAME` / `WECOM_CALENDAR_PASSWORD`
   first.
@@ -92,6 +94,17 @@ the entry identity and a read-only recovery step survive. Test the
 committed-then-failed path together with the resulting store state; never
 describe a write that did not happen as successful. The contract is in
 [`AGENTS.md`](AGENTS.md#write-outcomes).
+
+For changes to setup or login, keep `config set-context` offline and free of
+the credential store, with one merge for `--dry-run` and execution, and keep
+the WeCom email and the CalDAV password out of a preset. Cover a fresh config
+reload after login, conflict and idempotent setup, and the authentication,
+credential-save and config-write failures separately. Recovery text must never
+lead from an unreadable credential store to a new CalDAV password, because a
+new one invalidates the previous one. Use `keyring.MockInit()` or a fake
+keyring and an `httptest` stub; a test must not reach the OS keychain or a real
+server. The contract and its differences from the siblings are in
+[`AGENTS.md`](AGENTS.md#team-service-presets-and-personal-login).
 
 ## Commits, changelog & versioning
 

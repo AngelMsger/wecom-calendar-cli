@@ -98,7 +98,8 @@ re-run the failed run from the Actions tab, or move the tag to the fixed commit
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request:
 `gofmt` check, `go vet`, a `docs/cli/` drift check (`go run ./cmd/gen-docs`,
 then fail if the committed reference differs), `go test ./...`, and the
-end-to-end contract suite (`scripts/e2e.sh`). A second job runs the unit tests,
+end-to-end contract suite (`scripts/e2e.sh`, which ends with the offline team
+setup checks in `scripts/e2e-setup.sh`). A second job runs the unit tests,
 the npm installer mapping tests and a PowerShell/npm launcher smoke test on
 Windows. The live e2e checks are not run in CI — they require a real WeCom
 account and an app-specific CalDAV password.

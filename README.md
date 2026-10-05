@@ -32,7 +32,8 @@ official CLI lists events only within 30 days before or after today. See
 > your normal login password). Get it in the WeCom **mobile app**: Workbench →
 > Calendar → settings → **Sync to other calendars**. Fetching a new password
 > there **invalidates the previous one**, so if a working setup starts returning
-> 401, re-issue and re-configure.
+> 401, re-issue and re-configure. `wecom-calendar-cli auth guide` prints these
+> steps offline.
 
 ## Features
 
@@ -155,6 +156,11 @@ source <(wecom-calendar-cli completion bash)                            # bash, 
 wecom-calendar-cli completion zsh > "${fpath[1]}/_wecom-calendar-cli"   # zsh, persistent
 ```
 
+Rolling the CLI out to a team? An installer can preset the service with
+`config set-context`, without credentials or network access, and each member
+then runs `auth login`. See
+[Team setup and personal login](#team-setup-and-personal-login).
+
 ## Quick start
 
 ```bash
@@ -184,6 +190,112 @@ config file. The SQLite database lives next to `config.yaml` at
 `<config_dir>/calendar.db` and moves with `--config`; it may hold personal
 calendar data and is never committed.
 
+| Setting | Flag | Environment variable | Config key | Default |
+|---------|------|----------------------|------------|---------|
+| CalDAV server URL | `--base-url` | `WECOM_CALENDAR_SERVER` | `server` | `https://caldav.wecom.work/` |
+| Auth scheme | `--auth-scheme` | `WECOM_CALENDAR_AUTH_SCHEME` | `auth.scheme` | `basic`, the only scheme WeCom CalDAV accepts |
+| Credential page (display only) | `--credential-url` | `WECOM_CALENDAR_CREDENTIAL_URL` | `auth.credential_url` | none |
+| WeCom email (personal) | — | `WECOM_CALENDAR_USERNAME` | `auth.username` | none |
+| CalDAV password (personal, secret) | — | `WECOM_CALENDAR_PASSWORD` | OS keychain only | none |
+
+The first three are service settings a team can share; the last two belong to
+one person. `config show --explain` annotates the non-secret values with the
+layer each came from.
+
+### Team setup and personal login
+
+Distribute service settings separately from each member's credentials. An
+installer can write a named context without a network connection or access to
+the keychain:
+
+```bash
+# Installer: preset the service. --base-url defaults to the public WeCom
+# endpoint; --credential-url is an optional page of your own, such as an
+# internal how-to.
+wecom-calendar-cli config set-context team \
+  --credential-url https://wiki.example.com/wecom-caldav --activate
+
+# The member completes personal authentication in a terminal.
+wecom-calendar-cli --use-context team auth guide
+wecom-calendar-cli --use-context team auth login
+```
+
+`config set-context <name>` resolves **flags > environment > `.env` > the named
+target context > defaults**. It ignores personal environment fields and secrets
+— `WECOM_CALENDAR_USERNAME` and `WECOM_CALENDAR_PASSWORD`, including the scheme
+a password would otherwise imply — and it ignores `--use-context` and
+`WECOM_CALENDAR_CONTEXT`, because the name argument is the target. It never
+verifies connectivity, reads or writes the keychain, or changes another
+context's values or the shared `defaults`. An existing username stays as it is.
+The first context becomes current; later calls change the current context only
+with `--activate`.
+
+Identical presets do not rewrite the file. Conflicting non-empty service fields
+return `CONFIG_CONTEXT_CONFLICT` (exit 11) with a `details` object holding each
+field's `before` and `after` values. Inspect those differences, then pass
+`--overwrite` to update the supplied service fields, or use another context
+name. Fields you do not supply are retained. `--dry-run` uses the same merge
+and conflict checks and returns the proposed changes without writing anything;
+`--overwrite --dry-run` previews a deliberate conflicting update.
+
+A launcher or CI environment can inject the service settings on every run
+instead of writing a file:
+
+```bash
+export WECOM_CALENDAR_SERVER=https://caldav.wecom.work/
+export WECOM_CALENDAR_AUTH_SCHEME=basic
+# Optional: your team's page about obtaining the CalDAV password.
+export WECOM_CALENDAR_CREDENTIAL_URL=https://wiki.example.com/wecom-caldav
+wecom-calendar-cli auth guide
+wecom-calendar-cli auth login
+```
+
+Exports must be sourced into the member's shell or injected by a launcher or
+CI; an executed child script cannot export values back into its parent shell.
+`--auth-scheme` and `--credential-url` override these variables. The page is
+stored as `auth.credential_url` by `config set-context` and is **display-only**:
+the CLI never sends a request or a credential to it. The server URL keeps any
+path you give it, and login compares the complete URL. Requests themselves go
+to the `/calendar/` collection on that URL's origin.
+
+`auth guide` works offline and returns `server`, `scheme`, `credential_url`,
+`source`, `instructions`, `documentation_url` and `next_steps`. WeCom has no
+web page for the CalDAV password: it is issued in the mobile app, and
+`instructions` holds those steps. `credential_url` is therefore empty and
+`source` is `builtin`, unless a team page is configured — then `credential_url`
+is that page and `source` names where it came from (`flag`, `env`, `dotenv` or
+`file`).
+
+Issuing a new CalDAV password **invalidates the previous one**, and every
+calendar client still using the old password stops syncing. Reuse the current
+password when you have it. Issue a new one only when you have none, or when the
+server rejected the stored one (`CALDAV_AUTH`, HTTP 401) — never because a
+sandbox could not read the keychain. `CREDENTIAL_STORE_INACCESSIBLE`, or any
+error whose `recovery.scope` is `host`, is recovered by retrying with access to
+the home directory and the OS keychain.
+
+`auth login` reuses the resolved service, prints the same guide on stderr, asks
+for the WeCom email only when none is configured, and reads the password
+without echoing it. It verifies the credential with an authenticated request to
+the calendar home — the check `doctor` runs — before saving anything. It then
+stores the password in the secure store and the email and scheme in the config
+file, so a later process resolves the same credential without another prompt.
+A service that came only from the environment becomes a `default` context if
+none exists. A different complete service URL in the selected context fails
+with `CONTEXT_BASE_URL_MISMATCH` before any credential is stored.
+
+`CREDENTIAL_SAVE_FAILED` means the server accepted the password but it could
+not be stored. `LOGIN_CONFIG_WRITE_FAILED` means the password was stored but
+its identity could not be recorded; its `details` keep the context, server and
+scheme with `credential_stored: true`. In both cases fix the access problem and
+run `auth login` again with the **same** password. The config file is replaced
+atomically. Credential environment variables stay transient and are never
+copied by `config set-context`. `auth login` needs a terminal
+(`AUTH_LOGIN_NEEDS_TTY` otherwise); non-interactive callers supply
+`WECOM_CALENDAR_USERNAME` and `WECOM_CALENDAR_PASSWORD` instead of piping a
+secret into it. `config init` keeps its edit/add/replace flow, and now starts
+from the same presets and shows the same guide.
+
 ## Commands
 
 | Command | Purpose |
@@ -196,6 +308,9 @@ calendar data and is never committed.
 | `meta set` / `get` / `list` / `delete` | maintain the agent-owned metadata layer, keyed by event UID |
 | `whoami` | show the configured account, the identity attendee lists flag as `is_self` |
 | `config` / `auth` / `doctor` | setup, credentials and diagnostics |
+| `config set-context` | preset a named context's service settings offline, without credentials (`--activate`, `--overwrite`, `--dry-run`); see [Team setup and personal login](#team-setup-and-personal-login) |
+| `auth guide` | show offline where the CalDAV password comes from, plus a team's own page when one is configured |
+| `auth login` | verify the WeCom email and CalDAV password, then store both for the selected context |
 | `config get-contexts` / `use-context` / `delete-context` | manage multiple named servers |
 | `skill install` / `skill uninstall` | deploy or remove the embedded companion Skill (Claude Code, Codex, Cursor, Agents, Gemini, GitHub Copilot, OpenCode, Continue, Windsurf, Grok Build, Pi, Kilo Code, Roo Code) |
 | `skill status` / `skill path` | compare the loaded, installed and embedded Skill versions, and list install locations |

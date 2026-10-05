@@ -38,6 +38,7 @@ const (
 // CLIError is the single error type surfaced to the user. It is JSON-encodable
 // (see Payload) and unwraps to any wrapped cause.
 type CLIError struct {
+	Details    any
 	Category   Category
 	Code       string
 	Message    string
@@ -108,6 +109,9 @@ func (e *CLIError) WithRecovery(recovery Recovery) *CLIError {
 // WithCause attaches an underlying cause.
 func (e *CLIError) WithCause(cause error) *CLIError { e.cause = cause; return e }
 
+// WithDetails adds non-secret, structured recovery context.
+func (e *CLIError) WithDetails(details any) *CLIError { e.Details = details; return e }
+
 // AsCLIError converts any error into a *CLIError, classifying unknown errors
 // as internal. A nil error returns nil.
 func AsCLIError(err error) *CLIError {
@@ -128,6 +132,7 @@ type Payload struct {
 
 // PayloadBody is the inner object of Payload.
 type PayloadBody struct {
+	Details    any       `json:"details,omitempty"`
 	Category   Category  `json:"category"`
 	Code       string    `json:"code"`
 	Message    string    `json:"message"`
@@ -141,6 +146,7 @@ type PayloadBody struct {
 // Payload renders the error as its JSON-encodable form.
 func (e *CLIError) Payload() Payload {
 	return Payload{Error: PayloadBody{
+		Details:    e.Details,
 		Category:   e.Category,
 		Code:       e.Code,
 		Message:    e.Message,

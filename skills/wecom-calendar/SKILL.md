@@ -1,6 +1,6 @@
 ---
 name: wecom-calendar
-version: 0.3.0
+version: 0.4.0
 description: "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query it and maintain an agent-owned metadata layer (event classification, external task links). Use when the user mentions a WeCom / 企业微信 calendar, schedule or 日程 and asks to sync or refresh calendar data, list calendars, see or find events in a date range — including history more than 30 days from today, which the official wecom-cli cannot list — read one event's full detail (description, location, organizer, attendees), or annotate, classify, tag or link an event to a task (e.g. a Feishu project item) and read those annotations. It never changes the calendar; creating, editing or cancelling events belongs to wecom-cli. Queries read the local store, so run `sync` first and re-sync when a read prints `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor read-only mode (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only; --allow-writes overrides) and accept --dry-run."
 metadata:
   requires:
@@ -86,6 +86,10 @@ Do not reach for a non-existent "live query" flag: the freshness contract is
   the JSON error's `next_steps`. See
   [errors-and-exit-codes.md](references/errors-and-exit-codes.md).
 - Nothing is configured yet → [getting-started.md](references/getting-started.md).
+- User asks **where the CalDAV password comes from, or how to sign in** →
+  `auth guide` (offline), then they run `auth login` in their own terminal.
+  Someone is **rolling the CLI out to a team** → `config set-context`. See
+  [team-setup.md](references/team-setup.md).
 
 ## Commands
 
@@ -107,7 +111,10 @@ wecom-calendar-cli meta get <uid> [ns] [key]        # read annotations
 wecom-calendar-cli meta list [--uid u --namespace ns --key k --value v]
 wecom-calendar-cli meta delete <uid> <ns> <key> [--dry-run] [--yes]  # remove one
 wecom-calendar-cli config init|show|path|get-contexts|use-context|delete-context
-wecom-calendar-cli auth login|status|logout         # Basic (email + CalDAV pw)
+wecom-calendar-cli config set-context <name> [--base-url u] [--credential-url u] \
+    [--activate] [--overwrite] [--dry-run]          # offline service preset, no credentials
+wecom-calendar-cli auth guide                       # offline: where the CalDAV password comes from
+wecom-calendar-cli auth login|status|logout         # Basic (email + CalDAV pw); login needs a terminal
 wecom-calendar-cli doctor                           # config / creds / connectivity / Skill state
 wecom-calendar-cli skill status|install|path|show|uninstall   # manage this Skill
 wecom-calendar-cli version | completion
@@ -179,7 +186,7 @@ event details the question did not need.
 The full rules, including how to preserve existing annotations, are in
 [working-with-the-user.md](references/working-with-the-user.md).
 
-## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.3.0`
+## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.4.0`
 
 Once you have loaded this Skill, export that exact value in the environment
 used to run the CLI. The CLI compares it with the embedded Skill version and
@@ -199,19 +206,57 @@ reports CLI and Skill status too. Silence update notices with
 ## Credentials (agents)
 
 Auth is HTTP **Basic**: the user's WeCom email as username and an
-**app-specific CalDAV password** as the secret (obtained in the WeCom mobile
-app: Workbench → Calendar → settings → Sync to other calendars — fetching a new
-one invalidates the old). The user has normally already configured this.
-**Reuse their existing config and credentials** from
+**app-specific CalDAV password** as the secret. The password is issued in the
+WeCom mobile app (Workbench → Calendar → settings → Sync to other calendars);
+`auth guide` prints those steps offline. The user has normally already
+configured this. **Reuse their existing config and credentials** from
 `~/.angelmsger/wecom-calendar/config.yaml` + the OS keychain — do not run
 `config init` to create a fresh setup, and **never print or echo the CalDAV
-password** (not in logs, not in shell history, not in output). If credentials
-are missing or unreadable (`CREDENTIAL_STORE_INACCESSIBLE` /
-`CREDENTIAL_NOT_VISIBLE_OR_MISSING`, or `recovery.scope=host`), request
-elevated / host access and retry the same command once — do not re-initialize
-config inside a sandbox. See [getting-started.md](references/getting-started.md).
+password** (not in logs, not in shell history, not in output).
+
+**Issuing a new CalDAV password invalidates the previous one**, and every
+calendar client still using the old one stops syncing. So keep two situations
+apart:
+
+- **The credential store is inaccessible** (`CREDENTIAL_STORE_INACCESSIBLE`,
+  or any error with `recovery.scope=host`, which includes
+  `CREDENTIAL_NOT_VISIBLE_OR_MISSING` from a sandbox): request elevated / host
+  access and retry the same command once. Do not re-initialize config, run
+  `auth login`, or suggest a new password.
+- **A credential has to be acquired**: the host retry also reports it missing,
+  or the server rejected the stored password (`CALDAV_AUTH`, HTTP 401). Only
+  then point the user at `auth guide` and ask them to run `auth login` in their
+  own terminal.
+
+See [getting-started.md](references/getting-started.md).
+
+## Team service presets and authentication
+
+- Inspect existing configuration and reuse it. `config set-context <name>` is
+  the offline installer entrypoint; it accepts `--base-url`, `--auth-scheme`,
+  `--credential-url`, `--activate`, `--overwrite` and `--dry-run`. The server
+  defaults to the public WeCom endpoint, and `basic` is the only scheme.
+- `WECOM_CALENDAR_AUTH_SCHEME` and `WECOM_CALENDAR_CREDENTIAL_URL` complement
+  `WECOM_CALENDAR_SERVER`. Presets never copy the WeCom email or the CalDAV
+  password from the environment. Conflicts preserve existing values unless
+  explicitly overwritten.
+- Run `auth guide` for the acquisition steps and their source. WeCom has no web
+  credential page, so `credential_url` is empty unless the team configured a
+  page of its own. Never invent a URL, and never send a credential to one.
+- Once a service is preset, direct the member to `auth login` in their own
+  terminal; it verifies the password and saves it with their email. Do not ask
+  for the password in chat or pass it as an argument. In non-interactive
+  environments use `WECOM_CALENDAR_USERNAME` and `WECOM_CALENDAR_PASSWORD`.
+- A server/context mismatch needs a matching context, not a new password. A
+  partial login error names what was stored; the recovery is `auth login` again
+  with the same password.
+
+See [team-setup.md](references/team-setup.md) for the output fields, conflict
+semantics, the credential page override and failure recovery.
 
 ## Global flags
 
 `--format json|table|ndjson` · `--fields a,b.c` · `--config <dir>` ·
-`--use-context <name>` (pick a named server) · `--allow-writes` · `--verbose`
+`--use-context <name>` (pick a named server) · `--base-url <url>` ·
+`--auth-scheme basic` · `--credential-url <page>` (display only) ·
+`--allow-writes` · `--verbose`

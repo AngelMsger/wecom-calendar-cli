@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	"github.com/charmbracelet/huh"
@@ -87,6 +88,17 @@ func RunWizardHuh(hooks WizardHooks, inputs WizardInputs) (*WizardResult, error)
 		name = DefaultContextName
 	}
 
+	// Team presets seed every destination, so from here on prefill no longer
+	// says whether an existing context is being edited.
+	editingExisting := prefill != nil
+	if inputs.Prefill != nil {
+		var err error
+		prefill, err = inputs.Prefill(name, prefill)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Phase 2 — main fields, seeded based on phase 1 outcome.
 	var (
 		baseURL  = constants.DefaultServerURL
@@ -105,7 +117,7 @@ func RunWizardHuh(hooks WizardHooks, inputs WizardInputs) (*WizardResult, error)
 	// of inside huh.Validate) keeps keychain interaction to one call.
 	var kept Secrets
 	hasKeptSecret := false
-	if prefill != nil && inputs.LoadSecret != nil {
+	if editingExisting && prefill != nil && inputs.LoadSecret != nil {
 		if loaded, ok := inputs.LoadSecret(*prefill); ok {
 			kept = loaded
 			hasKeptSecret = true
@@ -126,12 +138,29 @@ func RunWizardHuh(hooks WizardHooks, inputs WizardInputs) (*WizardResult, error)
 		return nil
 	}
 
-	keepHint := passwordNote
+	keepHint := ""
 	if hasKeptSecret {
-		keepHint = "Leave empty and press Enter to keep the current value. " + passwordNote
+		keepHint = "Leave empty and press Enter to keep the current value."
 	}
 
-	if err := runPhase2(&baseURL, &username, &secret, secretValidator, keepHint); err != nil {
+	credentialURL := ""
+	if prefill != nil {
+		credentialURL = prefill.Auth.CredentialURL
+	}
+	// The same guide the plain wizard, auth login and missing-credential
+	// recovery print. It follows the server URL typed in the form above it.
+	guidance := func() string {
+		lines := []string{}
+		if keepHint != "" {
+			lines = append(lines, keepHint)
+		}
+		g, err := Guide(Config{BaseURL: baseURL, Auth: AuthConfig{Scheme: SchemeBasic, CredentialURL: credentialURL}}, nil)
+		if err != nil {
+			return strings.Join(append(lines, err.Error()), "\n")
+		}
+		return strings.Join(append(lines, g.Lines()...), "\n")
+	}
+	if err := runPhase2(&baseURL, &username, &secret, secretValidator, guidance); err != nil {
 		return nil, err
 	}
 
@@ -140,7 +169,8 @@ func RunWizardHuh(hooks WizardHooks, inputs WizardInputs) (*WizardResult, error)
 	keepSecret := secret == "" && hasKeptSecret && prefill != nil
 
 	picks := contextPicks{
-		Name: name, BaseURL: baseURL, Username: username,
+		CredentialURL: credentialURL,
+		Name:          name, BaseURL: baseURL, Username: username,
 		Secret: secret, KeepSecret: keepSecret,
 	}
 
@@ -244,8 +274,9 @@ func runPhase1(action, editTarget, newName *string, contexts []NamedContext, pre
 
 // runPhase2 collects the CalDAV server URL, WeCom email, and the app-specific
 // password. There is a single auth scheme (basic), so no scheme prompt is
-// shown.
-func runPhase2(baseURL, username, secret *string, secretValidator func(string) error, keepHint string) error {
+// shown. guidance renders the acquisition guide under the password field and
+// is re-evaluated when the server URL changes.
+func runPhase2(baseURL, username, secret *string, secretValidator func(string) error, guidance func() string) error {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().
 			Title("CalDAV server URL").
@@ -269,7 +300,7 @@ func runPhase2(baseURL, username, secret *string, secretValidator func(string) e
 			}),
 		huh.NewInput().
 			Title("App-specific password").
-			Description(keepHint).
+			DescriptionFunc(guidance, baseURL).
 			EchoMode(huh.EchoModePassword).
 			Value(secret).
 			Validate(secretValidator),

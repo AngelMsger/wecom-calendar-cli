@@ -9,7 +9,8 @@ is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.
 | Command | Description |
 | --- | --- |
 | [`wecom-calendar-cli auth`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-auth) | Inspect and manage stored credentials |
-| [`wecom-calendar-cli auth login`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-auth-login) | Store a credential for the configured server |
+| [`wecom-calendar-cli auth guide`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-auth-guide) | Show offline credential acquisition guidance for this service |
+| [`wecom-calendar-cli auth login`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-auth-login) | Verify and store personal credentials for the configured service |
 | [`wecom-calendar-cli auth logout`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-auth-logout) | Remove the stored credential for the configured server |
 | [`wecom-calendar-cli auth status`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-auth-status) | Show whether a usable credential is configured |
 
@@ -29,6 +30,7 @@ is published at <https://angelmsger.github.io/wecom-calendar-cli/cli/>.
 | [`wecom-calendar-cli config get-contexts`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-config-get-contexts) | List the configured contexts |
 | [`wecom-calendar-cli config init`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-config-init) | Interactively set up the CalDAV server URL and credentials |
 | [`wecom-calendar-cli config path`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-config-path) | Print the config file path |
+| [`wecom-calendar-cli config set-context`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-config-set-context) | Configure service presets without credentials or network access |
 | [`wecom-calendar-cli config show`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-config-show) | Show the resolved configuration |
 | [`wecom-calendar-cli config use-context`](https://angelmsger.github.io/wecom-calendar-cli/cli/#wecom-calendar-cli-config-use-context) | Switch the current context |
 

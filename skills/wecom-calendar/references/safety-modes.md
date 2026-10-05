@@ -19,7 +19,7 @@ those writes.
   never writes or deletes metadata. `sync --dry-run` still previews what it
   would reconcile. `expand` likewise only rebuilds derived occurrences.
 - **Reads** (never blocked): `calendar list`, `event list`, `event get`,
-  `whoami`, `meta get`, `meta list`, `doctor`, `config show`.
+  `whoami`, `meta get`, `meta list`, `doctor`, `config show`, `auth guide`.
 
 ## `--dry-run` — preview, never apply
 
@@ -109,10 +109,15 @@ config or env.
 CLI self-configuration and data sync are out of scope, otherwise an agent that
 enabled read-only would lose the ability to recover or refresh:
 
-- `config init`, `auth login`, `auth logout`, `config use-context`
+- `config init`, `config set-context`, `config use-context`, `auth login`,
+  `auth logout`
 - `skill install`, `skill uninstall`
 - `sync` — it does not write metadata; read-only protects the metadata layer,
   not the store's synced facts.
+
+`config set-context` has its own `--dry-run`, which previews a service preset
+without writing the config file. It is unrelated to read-only mode; see
+[team-setup.md](team-setup.md).
 
 ## Recommended pattern for agents
 

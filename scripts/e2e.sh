@@ -6,8 +6,9 @@
 # need a server (output on stdout, notices/errors on stderr, exit codes,
 # read-only and --dry-run gates, the time-window flags, cursor validation,
 # NDJSON continuation over a seeded store, write outcomes, and the CLI/Skill
-# upgrade loop). Set WECOM_CALENDAR_E2E_LIVE=1 — with real credentials in the
-# environment — to also exercise a live sync.
+# upgrade loop). It ends by running scripts/e2e-setup.sh, the offline team
+# setup and personal-login checks. Set WECOM_CALENDAR_E2E_LIVE=1 — with real
+# credentials in the environment — to also exercise a live sync.
 set -u -o pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -306,5 +307,9 @@ if [ "${WECOM_CALENDAR_E2E_LIVE:-0}" = "1" ]; then
   fi
 fi
 
-if [ "$fail" = "0" ]; then echo "e2e: PASS"; else echo "e2e: FAIL"; fi
-exit "$fail"
+if [ "$fail" != "0" ]; then echo "e2e: FAIL"; exit 1; fi
+echo "e2e: PASS"
+# Team setup runs as its own script with an empty environment and a scratch
+# HOME, so it cannot see a developer's configuration, keychain or .env.
+echo "== team setup and personal login =="
+WECOM_CALENDAR_BIN="$BIN" "$ROOT/scripts/e2e-setup.sh"

@@ -23,7 +23,8 @@ with a category-specific code. stdout stays empty, except that an unhealthy
 Always read `hint` and `next_steps` — they tell you how to recover.
 `retryable` indicates whether retrying the same invocation can help safely.
 Environment changes such as a host retry use the optional `recovery` object
-instead.
+instead. Some errors add an optional `details` object with non-secret context:
+the differing fields of a preset conflict, or what a partial login stored.
 
 ## Exit codes
 
@@ -33,14 +34,14 @@ instead.
 | 1 | internal | unexpected bug; re-run with `--verbose` |
 | 2 | usage | bad flags/arguments (e.g. `--to` without `--from`); read `next_steps`, check `--help` |
 | 3 | config | config/credential resolution failed; inspect `code` and `recovery` before reconfiguring |
-| 4 | auth | credentials rejected (401); run `auth status`, re-`config init` |
+| 4 | auth | credentials rejected (401); run `auth status`, then the user runs `auth login` |
 | 5 | permission | valid login, no access (403), or local `READONLY_BLOCKED` |
 | 6 | not_found | the event is not in the local store, or the server answered 404; a missing metadata entry is not an error |
 | 7 | rate_limit | server throttling (429); wait, then retry; avoid `sync --full` in a tight loop |
 | 8 | network | DNS/TLS/timeout; check `WECOM_CALENDAR_SERVER`, run `doctor` |
 | 9 | server | CalDAV 5xx; retry later |
 | 10 | parse | a response (or a `.ics` body) could not be decoded; likely a client bug — re-run with `--verbose` |
-| 11 | conflict | the server answered 409; `meta` writes never conflict (see below) |
+| 11 | conflict | a preset conflicts with an existing context (`CONFIG_CONTEXT_CONFLICT`), or the server answered 409; `meta` writes never conflict (see below) |
 
 ## Writes that succeeded
 
@@ -87,15 +88,44 @@ Two results look like failures and are not:
 - **`CREDENTIAL_STORE_INACCESSIBLE`** (config, 3) → the OS keychain could not be
   opened (common in a sandbox). When `recovery.scope` is `host`, request host
   access and retry the **same** command once; do not re-initialize config in the
-  sandbox.
+  sandbox. Its `next_steps` never point at acquiring a credential: do not
+  suggest a new CalDAV password, which would invalidate the one the user's
+  other calendar clients hold.
 - **`CREDENTIAL_NOT_VISIBLE_OR_MISSING`** (config, 3) → no credential resolved.
-  On the host this means the user has not configured one — ask them to run
-  `config init` or export `WECOM_CALENDAR_*`. In a sandbox it usually means the
-  user's credential is just unreadable from here: request elevation and retry.
+  In a sandbox it usually means the user's credential is just unreadable from
+  here: request elevation and retry. Only when the host retry also reports it
+  missing has the user not configured one — then follow the later
+  `next_steps`: `auth guide`, and the user runs `auth login` (or `config init`)
+  or exports `WECOM_CALENDAR_*`.
+- **`AUTH_NO_BASIC`** (config, 3) → an email or a password is missing, for
+  example `WECOM_CALENDAR_PASSWORD` without a username. `next_steps` include
+  `auth guide`.
 - **`CALDAV_AUTH`** (auth, 4) → the server rejected the CalDAV password.
   The most common cause is that a **new app-specific password was fetched in the
-  WeCom app, invalidating the old one** — get a fresh one (Workbench → Calendar →
-  settings → Sync to other calendars) and re-run `config init` / `auth login`.
+  WeCom app, invalidating the old one** — the user gets a fresh one (Workbench →
+  Calendar → settings → Sync to other calendars; `auth guide` prints the steps)
+  and runs `auth login` or `config init` again.
+- **`CONFIG_CONTEXT_CONFLICT`** (conflict, 11) → `config set-context` would
+  change a non-empty service field of an existing context. `details` lists each
+  field's `before` and `after`. Use `--overwrite` only when the user wants that
+  context changed, or pick another name. See [team-setup.md](team-setup.md).
+- **`CONTEXT_BASE_URL_MISMATCH`** (config, 3) → `auth login` saw a service URL
+  that differs from the selected context's. Nothing was verified or stored.
+  Select or create a matching context; do not treat it as a password problem.
+- **`AUTH_LOGIN_NEEDS_TTY`** (config, 3) → `auth login` has no terminal. Ask the
+  user to run it themselves, or use `WECOM_CALENDAR_USERNAME` and
+  `WECOM_CALENDAR_PASSWORD` for a non-interactive run.
+- **`CREDENTIAL_SAVE_FAILED`** / **`LOGIN_CONFIG_WRITE_FAILED`** (config, 3) →
+  `auth login` verified the password but could not finish saving. The first
+  stored nothing; the second stored the password and reports
+  `credential_stored: true` in `details`. Fix the access problem and run
+  `auth login` again with the **same** password.
+- **`AUTH_BAD_SCHEME`** (config, 3) → an auth scheme other than `basic` was
+  supplied through `--auth-scheme`, `WECOM_CALENDAR_AUTH_SCHEME` or the config
+  file. WeCom CalDAV accepts only `basic`.
+- **`BAD_BASE_URL`** / **`BAD_CREDENTIAL_URL`** (config, 3) → the server URL or
+  the credential page is not an absolute HTTP(S) URL, or it embeds credentials;
+  a server URL may not carry a query or fragment either.
 - **`READONLY_BLOCKED`** (permission, 5) → a `meta set` / `meta delete` was
   blocked by read-only mode. Use `--allow-writes` only when the current task
   authorizes that write, or `--dry-run` to preview. See
@@ -130,9 +160,14 @@ Two results look like failures and are not:
 
 - **auth (4)** → `wecom-calendar-cli auth status`; a server 401 means the
   stored password was rejected, usually because a new one was issued. Ask the
-  user to fetch a fresh one and run `auth login` in their own terminal. Host
-  access retries apply to the credential-resolution codes above, not to an
-  ordinary 401. Do not initialize a replacement config in a sandbox.
+  user to fetch a fresh one and run `auth login` in their own terminal;
+  `auth guide` prints where it comes from. Host access retries apply to the
+  credential-resolution codes above, not to an ordinary 401. Do not initialize
+  a replacement config in a sandbox.
+- **config (3) from credential resolution** → keep "the store is inaccessible"
+  apart from "a credential must be acquired". The first is a host retry and
+  nothing else. See
+  [team-setup.md](team-setup.md#a-new-password-invalidates-the-previous-one).
 - **not_found (6)** → verify the calendar `id` or event `uid` from a fresh
   `calendar list` / `event list`; if the store looks empty, you probably have
   not synced — run `sync` first.

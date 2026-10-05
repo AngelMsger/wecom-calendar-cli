@@ -1,15 +1,10 @@
 package app
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"strings"
-
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
+	"github.com/angelmsger/wecom-calendar-cli/internal/config"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 func newAuthCmd(s *appState) *cobra.Command {
@@ -17,7 +12,7 @@ func newAuthCmd(s *appState) *cobra.Command {
 		Use:   "auth",
 		Short: "Inspect and manage stored credentials",
 	}
-	cmd.AddCommand(newAuthStatusCmd(s), newAuthLoginCmd(s), newAuthLogoutCmd(s))
+	cmd.AddCommand(newAuthGuideCmd(s), newAuthStatusCmd(s), newAuthLoginCmd(s), newAuthLogoutCmd(s))
 	return cmd
 }
 
@@ -55,51 +50,43 @@ func newAuthStatusCmd(s *appState) *cobra.Command {
 }
 
 func newAuthLoginCmd(s *appState) *cobra.Command {
-	return &cobra.Command{
-		Use:   "login",
-		Short: "Store a credential for the configured server",
-		Long:  "Prompt for the app-specific password and store it securely. Run `config init` first if the server URL is not set.",
+	return &cobra.Command{Use: "login", Short: "Verify and store personal credentials for the configured service", Args: cobra.NoArgs,
+		Long: "Reuse the configured service, show where the CalDAV password comes from, and\n" +
+			"store a verified password together with its WeCom email. Issuing a new\n" +
+			"password in WeCom invalidates the previous one. Requires a terminal; use the\n" +
+			"credential environment variables for non-interactive execution.",
 		Example: "  wecom-calendar-cli auth login\n" +
 			"  wecom-calendar-cli --use-context personal auth login",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := s.cfg()
-			if cfg.BaseURL == "" {
-				return cerrors.New(cerrors.CategoryConfig, "NO_SERVER",
-					"no server URL configured").
-					WithNextSteps("wecom-calendar-cli config init")
+			if _, _, err := loginFile(s, cfg, auth.Credential{Scheme: cfg.Auth.Scheme, Username: cfg.Auth.Username}); err != nil {
+				return err
 			}
 			if !stdinIsTTY() {
-				return cerrors.New(cerrors.CategoryConfig, "AUTH_LOGIN_NEEDS_TTY",
-					"auth login needs an interactive terminal to prompt for the password").
-					WithHint("Run `wecom-calendar-cli auth login` yourself in a terminal, or provide credentials via environment variables (WECOM_CALENDAR_USERNAME + WECOM_CALENDAR_PASSWORD).")
+				return cerrors.New(cerrors.CategoryConfig, "AUTH_LOGIN_NEEDS_TTY", "auth login needs an interactive terminal").WithHint("Run `wecom-calendar-cli auth login` yourself in a terminal, or provide credentials via environment variables (WECOM_CALENDAR_USERNAME + WECOM_CALENDAR_PASSWORD).").WithNextSteps("wecom-calendar-cli auth guide")
 			}
-			r := bufio.NewReader(os.Stdin)
+			if err := printAuthGuide(cfg); err != nil {
+				return err
+			}
 			cred := auth.Credential{Scheme: cfg.Auth.Scheme, Username: cfg.Auth.Username}
-			if cred.Scheme == "" {
-				cred.Scheme = auth.SchemeBasic
-			}
+			var err error
 			if cred.Username == "" {
-				cred.Username = ask(r, "WeCom email")
+				cred.Username, err = promptLine("WeCom email", "")
+				if err != nil {
+					return err
+				}
+				cred.Username = config.NormalizeUsername(cred.Username)
 			}
-			fmt.Fprintln(os.Stderr, "Note: fetching a new password in WeCom invalidates the previous one.")
-			secret, err := askSecret("App-specific password")
+			cred.Secret, err = promptSecret("App-specific password")
+			if err != nil {
+				return cerrors.Wrap(err, cerrors.CategoryConfig, "READ_SECRET",
+					"could not read the password from the terminal")
+			}
+			backend, err := completeLogin(s, cfg, cred, s.loginServices())
 			if err != nil {
 				return err
 			}
-			cred.Secret = secret
-			if err := cred.Validate(); err != nil {
-				return err
-			}
-			backend, err := auth.Save(cfg.BaseURL, cred, s.store)
-			if err != nil {
-				return err
-			}
-			return s.emit(map[string]any{
-				"server":             cfg.BaseURL,
-				"scheme":             cred.Scheme,
-				"credential_backend": fmt.Sprint(backend),
-				"status":             "stored",
-			})
+			return s.emit(map[string]any{"server": cfg.BaseURL, "scheme": cred.Scheme, "credential_backend": backend, "status": "stored"})
 		},
 	}
 }
@@ -124,26 +111,4 @@ func newAuthLogoutCmd(s *appState) *cobra.Command {
 			return s.emit(map[string]any{"server": cfg.BaseURL, "status": "removed"})
 		},
 	}
-}
-
-func ask(r *bufio.Reader, label string) string {
-	// Prompts are human interaction — write them to stderr so stdout stays
-	// clean JSON.
-	fmt.Fprintf(os.Stderr, "%s: ", label)
-	line, _ := r.ReadString('\n')
-	return strings.TrimSpace(line)
-}
-
-// askSecret reads a secret without echoing it. auth login already requires an
-// interactive stdin, so terminal input is expected; the prompt and the trailing
-// newline go to stderr to keep stdout clean.
-func askSecret(label string) (string, error) {
-	fmt.Fprintf(os.Stderr, "%s: ", label)
-	b, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
-	if err != nil {
-		return "", cerrors.Wrap(err, cerrors.CategoryConfig, "READ_SECRET",
-			"could not read the password from the terminal")
-	}
-	return strings.TrimSpace(string(b)), nil
 }

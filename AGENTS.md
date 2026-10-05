@@ -88,7 +88,9 @@ Empirically verified; generic CalDAV libraries fail here:
 ## Commands
 
 `sync` · `expand` · `calendar list` · `event list|get` ·
-`meta set|get|list|delete` · `whoami` · `config` · `auth` · `doctor` ·
+`meta set|get|list|delete` · `whoami` ·
+`config init|show|path|set-context|get-contexts|use-context|delete-context` ·
+`auth guide|status|login|logout` · `doctor` ·
 `skill status|install|path|show|uninstall` · `version` · `completion`.
 
 Contracts (family baseline): stdout is machine-readable data, notices/errors go
@@ -250,6 +252,125 @@ binary. No command creates events offline, so it seeds synthetic occurrences
 with `test/seedstore` — `event list` reads only the derived `event_instances`
 table — instead of starting a mock server.
 
+### Team service presets and personal login
+
+Ported from `jira-cli` (`bebf7e0`) file by file, and cross-checked against
+`bitbucket-cli` (`fd3607f`). `internal/config/setup.go` owns offline
+service-field validation, the acquisition guide and the pure
+`PlanServiceContext` merge that execution and `--dry-run` share.
+`LoadOptions.Setup` selects the requested destination even when it is new,
+ignores runtime context selection, and drops personal environment fields before
+a password can imply the scheme. `AuthConfig.CredentialURL` is additive,
+non-secret and serialized through every config shape; `WriteFile` replaces the
+file through a temporary file; error payloads may carry non-secret `details`.
+`internal/app/setup.go` wires `config set-context`, `auth guide` and the wizard
+prefill. `internal/app/auth_login.go` checks the complete normalized service
+URL, verifies, stores the secret and then persists the identity, naming what
+was stored when a step fails. `internal/app/prompt.go` holds the terminal
+prompts.
+
+The siblings keep the user-facing contract in `docs/installation.md` and the
+design notes in `docs/technical-design.md`. This project has neither file: the
+canonical user-facing text is the README section "Team setup and personal
+login", and the design notes are this section.
+
+Keep service presets separate from personal credentials. The service fields
+are `server`, `auth.scheme` and `auth.credential_url`; the WeCom email and the
+CalDAV password are personal and never enter a preset. `config set-context`
+must resolve the named destination, stay offline and credential-store-free, and
+preserve other contexts, usernames and the shared defaults. Login must persist
+its identity as well as its secret, and reject a different complete service URL
+before any credential write. Use the one guide in both wizards, in login and in
+missing-credential recovery; never request its URL. When changing this flow,
+cover a fresh config reload, conflict and idempotent setup, and each partial
+persistence failure.
+
+The differences below are intentional. Each follows from the domain and has a
+test:
+
+- **There is no web credential page.** WeCom issues the CalDAV password in its
+  mobile app: Workbench → Calendar → settings → "Sync to other calendars".
+  `Guide` returns those steps as `instructions`, leaves `credential_url` empty
+  and reports `source: builtin`. It has no built-in or fallback URL and no
+  `flavor`. A team may configure a display-only page, which then fills
+  `credential_url` and names its layer in `source`; the "Credential page" line
+  is printed only then. `documentation_url` is the README section, because
+  WeCom publishes no page about this password that the project has verified.
+  `TestCredentialGuideHasNoURLUnlessATeamConfiguresOne`,
+  `TestCredentialGuideJoinsAbsenceErrorsOnly`.
+- **A new password invalidates the previous one.** Every calendar client still
+  using the old password stops syncing, so "acquire a credential" is a costly
+  recovery here. The guide, the login prompt and both partial-persistence
+  errors say so; `CREDENTIAL_SAVE_FAILED` and `LOGIN_CONFIG_WRITE_FAILED` tell
+  the user to enter the same password again. "The credential store is
+  inaccessible" stays strictly apart from "acquire a new credential":
+  `WithCredentialGuide` adds `auth guide` to `AUTH_NO_BASIC`, and to
+  `CREDENTIAL_NOT_VISIBLE_OR_MISSING` after its host retry, and never to
+  `CREDENTIAL_STORE_INACCESSIBLE`, whose steps forbid issuing a password. An
+  agent that re-issues one because a sandbox could not read the keychain breaks
+  the user's other calendar clients.
+  `TestInaccessibleStoreNeverSuggestsAcquiringACredential`,
+  `TestMissingCredentialPointsAtTheGuideAfterTheHostRetry`,
+  `TestLoginPersistenceFailuresAreDistinguishable`.
+- **There is one auth scheme.** The plumbing is kept so the shape matches —
+  `--auth-scheme`, `WECOM_CALENDAR_AUTH_SCHEME`, `auth.scheme`,
+  `ValidateService` — and `basic` is the only value it accepts.
+  `resolveAuthDefaults` is the empty hook `prometheus-cli` also keeps; there is
+  no scheme prompt, no `AUTH_NO_TOKEN` and no `promptChoice`. Because the value
+  cannot show whether a password implied the scheme, the exclusion test asserts
+  on its source. `TestOnlyTheBasicSchemeIsAccepted`,
+  `TestSetupTargetsNamedContextAndExcludesPersonalEnvironment`.
+- **The server URL has a default.** The default layer supplies the public
+  endpoint, so `config set-context <name>` is valid without `--base-url` and
+  writes it in normalized form, and `NO_BASE_URL` cannot be reached through the
+  loader. `TestPresetDefaultsToThePublicEndpointAndCarriesNoIdentity`.
+- **Verification has no identity to read back.** `verifyCredential` is the
+  `Ping` that `doctor` and `config init` already run, one authenticated
+  PROPFIND on the calendar-home. The server answers an anonymous PROPFIND with
+  401 and serves no principal resource, so the 207 is the evidence and
+  `AUTH_IDENTITY_UNAVAILABLE` is not ported. Any other answer fails.
+  `TestLoginStoresNothingWhenTheServerRejectsThePassword`,
+  `TestVerifyLoginRejectsResponsesThatAreNotCalDAV`,
+  `TestLoginAgainstTheStubResolvesInAFreshProcess`.
+- **The URL's path is compared but not routed.** `NormalizeServiceURL` and the
+  stored context keep a path, and login compares complete URLs as the siblings
+  do. `pkg/caldav` derives only the origin from the base URL and addresses the
+  calendar-home at `/calendar/` on it, so the path never reaches a request. The
+  comparison is therefore stricter than routing: a path-only difference is
+  refused with `CONTEXT_BASE_URL_MISMATCH` instead of being treated as the same
+  service. Routing by path would be a `pkg/caldav` change, outside this
+  contract. `TestLoginRejectsChangedDeploymentPathBeforeAnyIO`,
+  `TestLoginVerifiesAtTheCalendarHomeOfTheOrigin`.
+- **The plain wizard keeps its scripted flow.** `config init` gains the prefill
+  and the guide and is otherwise unchanged. Where the reference driver fails
+  any prompt at end of input, this one still takes a prompt's default there, so
+  a script that stops after the password keeps working; only a required prompt
+  without a default returns the error, where it used to re-prompt forever. The
+  section header is printed under the same conditions as before.
+  `internal/config/wizard_test.go`.
+- **Credential cleanup spares a secret that is still in use.** The keychain
+  account is `<host>:<scheme>`, as in the siblings. There a context usually has
+  a host of its own; here nearly every context points at the one public
+  endpoint, so a preset and a personal context share a stored password, and a
+  preset's normalized URL differs in spelling from the wizard default. The
+  reference forgets the old secret whenever an edited context's URL string
+  changes, and on every `delete-context`. That would delete the password in
+  use and force a new one, so `forgetUnusedCredential` forgets a secret only
+  when no remaining context resolves the same account, and `delete-context`
+  does so after its config write. `internal/app/config_credentials_test.go`.
+
+Contexts do not partition credentials or data, and this port did not change
+that: the keychain account ignores the context and the username, and the store
+belongs to the config directory. Two contexts for different WeCom accounts on
+the same server overwrite each other's stored password.
+
+`scripts/e2e-setup.sh`, run at the end of `scripts/e2e.sh`, is the reference
+script with the WeCom checks added: the default endpoint, the guide without a
+URL, the scheme, and the two guards `auth login` applies before it prompts. It
+runs with an empty environment and a scratch `HOME`. `auth login` needs a
+terminal, so its verified path is covered by unit tests against an `httptest`
+stub rather than by the shell suite.
+
 ### Companion Skill rules
 
 `skills/wecom-calendar/references/working-with-the-user.md` is the single home
@@ -283,17 +404,20 @@ agent-owned metadata layer, companion Skill, generated CLI docs, update-notice,
 CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on Linux + Windows
 runtime), and npm distribution.
 
-**Alignment backlog.** The family adopted several shared contracts while this
-project was archived. One has not been checked or ported here yet: team
-service presets with personal login. Treat it as applicable and not yet ported
-until it is ported or recorded as an intentional difference, then drop it from
-this note. The rule on replying to human-authored comments, adopted in the same
-period, has nothing to apply to: this CLI has no comment surface.
+The team presets, `auth guide` and the persistence steps of `auth login` are
+verified with an `httptest` stub and the offline e2e suite, not against the
+live server. The live check `auth login` runs is the same `Ping` as `doctor`.
+
+**Alignment.** The shared contracts the family adopted while this project was
+archived are all ported or recorded as intentional differences. The rule on
+replying to human-authored comments, adopted in the same period, has nothing to
+apply to: this CLI has no comment surface.
 
 **Ported, with intentional differences.** The CLI and Skill upgrade loop, the
-Skill collaboration and write-recovery rules, the time-window contract and
-NDJSON continuation metadata are in place; the sections above describe them.
-They differ from the siblings only where the domain does:
+Skill collaboration and write-recovery rules, the time-window contract, NDJSON
+continuation metadata, and team service presets with personal login are in
+place; the sections above describe them. They differ from the siblings only
+where the domain does:
 
 - The time-window contract keeps the family vocabulary and rules, with the
   four calendar differences, the pageability rule, the `expand` exception and
@@ -303,7 +427,16 @@ They differ from the siblings only where the domain does:
 - NDJSON continuation has no difference in the renderer. Only the e2e differs:
   it seeds the store with `test/seedstore` and asserts in the shell script,
   where `bitbucket-cli` drives a mock server from a Python helper.
-
+- Team service presets and personal login keep the family's commands,
+  precedence, merge and login persistence, with the eight differences listed
+  under "Team service presets and personal login": no web credential page, a
+  password that a new one invalidates, one scheme, a default server URL,
+  verification without an identity read-back, a path that is compared but not
+  routed, the scripted wizard flow, and guarded credential cleanup. Covered by
+  `internal/config/{setup,file,wizard}_test.go`,
+  `internal/auth/resolver_test.go`,
+  `internal/app/{auth_login,config_credentials}_test.go` and
+  `scripts/e2e-setup.sh`.
 - `WRITE_SUCCEEDED_READ_FAILED`, `WRITE_SUCCEEDED_RESPONSE_INVALID`, the
   "outcome unknown" wrapper for write failures and the partial-batch error are
   not ported, for the reasons under "Write outcomes".

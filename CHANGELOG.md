@@ -48,6 +48,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   call, so its cursor could only ever fail with `CURSOR_MISMATCH`. `--all`
   reads a relative window in one call.
 - **`pkg/timeutil`.** The window parser is importable, as in `prometheus-cli`.
+- **Team service presets.** `config set-context <name>` writes a named
+  context's service settings — the CalDAV server URL, the auth scheme and an
+  optional credential page — from flags, the environment or `.env`, without
+  credentials or network access. It ignores the WeCom email and the CalDAV
+  password, preserves other contexts, usernames and the shared defaults, and
+  does not rewrite the file for identical input. Changing a non-empty field
+  needs `--overwrite`; without it `CONFIG_CONTEXT_CONFLICT` (exit 11) lists
+  each field's `before` and `after` in `details`. `--dry-run` previews with the
+  same merge. The first context becomes current, an existing one only with
+  `--activate`. `--base-url` is optional, because the server defaults to the
+  public WeCom endpoint.
+- **`--auth-scheme` and `--credential-url`**, with `WECOM_CALENDAR_AUTH_SCHEME`,
+  `WECOM_CALENDAR_CREDENTIAL_URL` and the `auth.credential_url` config key.
+  `basic` is the only scheme WeCom CalDAV accepts; any other value is
+  `AUTH_BAD_SCHEME`. The credential page is display-only — the CLI never
+  requests it — and `config show` reports it.
+- **`auth guide`.** An offline description of where the CalDAV password comes
+  from: `server`, `scheme`, `credential_url`, `source`, `instructions`,
+  `documentation_url` and `next_steps`. WeCom issues the password in its mobile
+  app and has no web page for it, so `instructions` holds the navigation steps
+  and `credential_url` stays empty unless a team configured a page of its own.
+  The instructions also say that a new password invalidates the previous one,
+  and when not to issue one. `auth login`, `config init` and missing-credential
+  errors use the same guide.
+- **Error `details`.** A structured error may carry an optional `details`
+  object with non-secret context.
 
 ### Changed
 
@@ -78,6 +104,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the Skill documents `--since <duration>`, look-ahead windows, the local
   meaning of a date, paging with fixed bounds and the NDJSON pagination notice.
   Skill bumped to `0.3.0`.
+- **`auth login` verifies before it stores, and stores the identity.** It
+  checks the password with an authenticated request to the calendar home, then
+  saves it together with the WeCom email and the scheme, so a later process
+  resolves the same credential without another prompt. A service that came only
+  from the environment becomes a `default` context. A service URL that differs
+  from the selected context's is refused with `CONTEXT_BASE_URL_MISMATCH`
+  before anything is stored. `CREDENTIAL_SAVE_FAILED` and
+  `LOGIN_CONFIG_WRITE_FAILED` say what was stored and ask for the same password
+  again. Previously the password was stored unchecked and the email was left
+  out of the config file. The command's output is unchanged.
+- **`config init` starts from presets and shows the guide.** The server URL and
+  credential page offered for a context come from flags, the environment,
+  `.env` and that context, and a configured credential page survives an edit.
+  The acquisition guide replaces the one-line password note. In the plain
+  wizard, a server URL that is not a plain HTTP(S) URL now stops setup before
+  the password prompt, instead of failing validation afterwards.
+- **Credential recovery steps.** `CREDENTIAL_NOT_VISIBLE_OR_MISSING` and
+  `AUTH_NO_BASIC` now list `auth guide`, after the host retry.
+  `CREDENTIAL_STORE_INACCESSIBLE` never does: its steps say not to run
+  `auth login` or issue a new CalDAV password, which would invalidate the one
+  other calendar clients use. `AUTH_LOGIN_NEEDS_TTY` points at `auth guide`.
+- **Companion Skill covers team setup.** A new reference, `team-setup.md`,
+  documents presets, the guide, personal login and their failures, and the
+  Skill keeps "the credential store is inaccessible" apart from "a credential
+  must be acquired". Skill bumped to `0.4.0`.
 
 ### Deprecated
 
@@ -111,6 +162,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rate-limit recovery step.** It told callers to narrow `--since`/`--until`,
   flags that `sync` — the only command that reaches the server in bulk — never
   had. It now says to sync one `--calendar` at a time.
+- **The config file is replaced atomically**, so a write that fails no longer
+  truncates an existing configuration.
+- **The plain `config init` wizard at end of input.** A required prompt with no
+  default re-prompted forever once its input had ended; it now fails with the
+  read error. A prompt with a default still takes it, so scripted setups are
+  unaffected. Text prompts on a terminal no longer read ahead of the hidden
+  password prompt.
+- **`config init` and `config delete-context` no longer delete a credential
+  that is still in use.** Editing a context so that only the spelling of its
+  server URL changed deleted the password just saved, and deleting a context
+  removed the password of every other context on the same server. A stored
+  credential is now forgotten only when no remaining context uses it, and
+  `delete-context` forgets it after the config file is written.
+- **Skill: contexts and the store.** The Skill said each context has its own
+  store. Every context in a config directory shares its `calendar.db`, and
+  contexts on the same server share one stored password.
 
 ## [0.2.3] - 2026-10-05
 

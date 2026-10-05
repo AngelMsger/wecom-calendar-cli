@@ -33,7 +33,13 @@ binary. After installing or upgrading the package, run
 > **Credential note.** Auth is HTTP Basic: your WeCom email plus an
 > **app-specific CalDAV password** obtained in the WeCom mobile app (Workbench →
 > Calendar → settings → Sync to other calendars). Fetching a new password there
-> invalidates the previous one.
+> invalidates the previous one. `wecom-calendar-cli auth guide` prints these
+> steps offline.
+
+For a team, an installer can preset the service with
+`wecom-calendar-cli config set-context <name>` — no credentials or network
+access needed — and each member then runs `wecom-calendar-cli auth login`. See
+[Team setup and personal login](https://github.com/AngelMsger/wecom-calendar-cli#team-setup-and-personal-login).
 
 See the
 [project README](https://github.com/AngelMsger/wecom-calendar-cli) for full

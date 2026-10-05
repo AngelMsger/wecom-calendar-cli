@@ -40,6 +40,12 @@ own. See [safety-modes.md](safety-modes.md).
 A request to create, move or cancel an event is outside this CLI. Hand it to
 `wecom-cli`; do not record it as metadata instead.
 
+Setup belongs to the user. Reuse the configuration and credentials already in
+place; do not create a context, overwrite a preset or start a login the request
+did not ask for. Never ask for the CalDAV password in chat, and never suggest
+issuing a new one because a credential store could not be read — see
+[team-setup.md](team-setup.md#a-new-password-invalidates-the-previous-one).
+
 ## Bounded reads, no open-ended waiting
 
 Size the window to the question and project with `--fields`. Call `event get`

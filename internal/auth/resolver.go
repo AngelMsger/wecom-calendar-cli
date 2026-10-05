@@ -10,7 +10,16 @@ import (
 // Resolve produces a Credential from configuration. A secret supplied via
 // flags/env/.env (carried in secrets) takes precedence; otherwise the secret
 // is loaded from the Store. The returned credential is validated.
-func Resolve(cfg config.Config, secrets config.Secrets, store *Store) (Credential, error) {
+//
+// An absent credential gains the acquisition guide as a next step. An
+// inaccessible store never does: issuing a new CalDAV password invalidates the
+// previous one, so a keychain a sandbox cannot read must not lead there.
+func Resolve(cfg config.Config, secrets config.Secrets, store *Store) (credResult Credential, resultErr error) {
+	defer func() {
+		if resultErr != nil {
+			resultErr = config.WithCredentialGuide(resultErr, cfg)
+		}
+	}()
 	scheme := cfg.Auth.Scheme
 	if scheme == "" {
 		scheme = SchemeBasic
@@ -43,7 +52,7 @@ func credentialNotVisibleOrMissingError() error {
 		WithNextSteps(
 			"Retry the same command with access to the host user environment (home directory and OS keychain).",
 			"wecom-calendar-cli doctor",
-			"Only if the host retry also reports missing credentials, run `wecom-calendar-cli config init` in the user's terminal or set WECOM_CALENDAR_* environment variables.").
+			"Only if the host retry also reports missing credentials, run `wecom-calendar-cli auth login` (or `config init`) in the user's terminal, or set WECOM_CALENDAR_* environment variables. Do not issue a new CalDAV password before then: it invalidates the previous one.").
 		WithRecovery(hostCredentialRecovery())
 }
 
@@ -54,7 +63,7 @@ func credentialStoreInaccessibleError(err error) error {
 		WithNextSteps(
 			"Retry the same command with access to the host user environment (home directory and OS keychain).",
 			"wecom-calendar-cli doctor",
-			"Do not run `config init` unless the same check also fails in the host environment.").
+			"Do not run `config init` or `auth login`, and do not issue a new CalDAV password, unless the same check also fails in the host environment.").
 		WithRecovery(hostCredentialRecovery())
 }
 

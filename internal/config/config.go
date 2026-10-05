@@ -53,10 +53,13 @@ type Config struct {
 	Defaults Defaults   `yaml:"defaults"`
 }
 
-// AuthConfig holds non-secret auth settings.
+// AuthConfig holds non-secret auth settings. CredentialURL is an optional,
+// display-only page a team publishes about obtaining the CalDAV password; the
+// CLI never requests it.
 type AuthConfig struct {
-	Scheme   string `yaml:"scheme"`
-	Username string `yaml:"username,omitempty"`
+	CredentialURL string `yaml:"credential_url,omitempty"`
+	Scheme        string `yaml:"scheme"`
+	Username      string `yaml:"username,omitempty"`
 }
 
 // Defaults holds tunable runtime defaults.
@@ -108,14 +111,15 @@ func (r *Resolved) ContextSelectedExplicitly() bool {
 
 // Field keys used for layer maps and provenance tracking.
 const (
-	fieldServer       = "server"
-	fieldAuthScheme   = "auth.scheme"
-	fieldAuthUsername = "auth.username"
-	fieldFormat       = "defaults.format"
-	fieldPageSize     = "defaults.page_size"
-	fieldTimeout      = "defaults.timeout"
-	fieldMaxRetries   = "defaults.max_retries"
-	fieldReadOnly     = "defaults.read_only"
+	fieldCredentialURL = "auth.credential_url"
+	fieldServer        = "server"
+	fieldAuthScheme    = "auth.scheme"
+	fieldAuthUsername  = "auth.username"
+	fieldFormat        = "defaults.format"
+	fieldPageSize      = "defaults.page_size"
+	fieldTimeout       = "defaults.timeout"
+	fieldMaxRetries    = "defaults.max_retries"
+	fieldReadOnly      = "defaults.read_only"
 	// Secret field key (never persisted to the YAML file).
 	fieldPassword = "secret.password"
 )
@@ -137,8 +141,9 @@ func configFromMap(m map[string]string) Config {
 	c := Config{
 		BaseURL: m[fieldServer],
 		Auth: AuthConfig{
-			Scheme:   m[fieldAuthScheme],
-			Username: m[fieldAuthUsername],
+			CredentialURL: m[fieldCredentialURL],
+			Scheme:        m[fieldAuthScheme],
+			Username:      m[fieldAuthUsername],
 		},
 		Defaults: Defaults{
 			Format:     m[fieldFormat],
@@ -194,3 +199,6 @@ func durationOr(s string, fallback time.Duration) time.Duration {
 	}
 	return fallback
 }
+
+// FieldCredentialURL is the provenance key for the acquisition page.
+const FieldCredentialURL = fieldCredentialURL

@@ -1,13 +1,11 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"os"
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
-	"github.com/angelmsger/wecom-calendar-cli/pkg/caldav"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +35,7 @@ func newConfigCmd(s *appState) *cobra.Command {
 		Use:   "config",
 		Short: "Manage wecom-calendar-cli configuration",
 	}
-	cmd.AddCommand(
+	cmd.AddCommand(newConfigSetContextCmd(s),
 		newConfigInitCmd(s), newConfigShowCmd(s), newConfigPathCmd(s),
 		newConfigGetContextsCmd(s), newConfigUseContextCmd(s), newConfigDeleteContextCmd(s),
 	)
@@ -61,8 +59,20 @@ func newConfigInitCmd(s *appState) *cobra.Command {
 					"failed to read the config file")
 			}
 			inputs := config.WizardInputs{
-				Existing:   &existing,
-				LoadSecret: loadExistingSecret(s.store),
+				Existing: &existing,
+				Prefill:  s.setupPrefill,
+				LoadSecret: func(nc config.NamedContext) (config.Secrets, bool) {
+					old, ok := existing.Context(nc.Name)
+					if !ok {
+						return config.Secrets{}, false
+					}
+					oldURL, e1 := config.NormalizeServiceURL(old.BaseURL)
+					newURL, e2 := config.NormalizeServiceURL(nc.BaseURL)
+					if e1 != nil || e2 != nil || oldURL != newURL || old.Auth.Scheme != nc.Auth.Scheme {
+						return config.Secrets{}, false
+					}
+					return loadExistingSecret(s.store)(nc)
+				},
 			}
 			result, err := runWizard(s, wizardHooks(s), inputs)
 			if err != nil {
@@ -88,16 +98,18 @@ func newConfigShowCmd(s *appState) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg := s.cfg()
 			view := map[string]any{
-				"server":      cfg.BaseURL,
-				"auth.scheme": cfg.Auth.Scheme,
-				"auth.user":   cfg.Auth.Username,
-				"format":      cfg.Defaults.Format,
-				"timeout":     cfg.Defaults.Timeout.String(),
-				"database":    storePath(s.cfgDir),
+				"server":              cfg.BaseURL,
+				"auth.scheme":         cfg.Auth.Scheme,
+				"auth.credential_url": cfg.Auth.CredentialURL,
+				"auth.user":           cfg.Auth.Username,
+				"format":              cfg.Defaults.Format,
+				"timeout":             cfg.Defaults.Timeout.String(),
+				"database":            storePath(s.cfgDir),
 			}
 			if explain {
 				src := s.resolved.Sources
 				view["server"] = explained(cfg.BaseURL, src, config.FieldServer)
+				view["auth.credential_url"] = explained(cfg.Auth.CredentialURL, src, config.FieldCredentialURL)
 				view["auth.scheme"] = explained(cfg.Auth.Scheme, src, config.FieldAuthScheme)
 				view["auth.user"] = explained(cfg.Auth.Username, src, config.FieldAuthUser)
 				view["format"] = explained(cfg.Defaults.Format, src, config.FieldFormat)
@@ -233,8 +245,11 @@ func newConfigUseContextCmd(s *appState) *cobra.Command {
 
 func newConfigDeleteContextCmd(s *appState) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "delete-context <name>",
-		Short:   "Delete a context and its stored credential",
+		Use:   "delete-context <name>",
+		Short: "Delete a context and its stored credential",
+		Long: "Delete a context from the config file, together with its stored credential.\n" +
+			"The credential is kept when another context on the same server still uses\n" +
+			"it: a new CalDAV password would invalidate the previous one.",
 		Example: "  wecom-calendar-cli config delete-context personal",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -253,12 +268,6 @@ func newConfigDeleteContextCmd(s *appState) *cobra.Command {
 				return cerrors.New(cerrors.CategoryUsage, "LAST_CONTEXT",
 					"cannot delete the only context")
 			}
-			scheme := target.Auth.Scheme
-			if scheme == "" {
-				scheme = auth.SchemeBasic
-			}
-			_ = auth.Forget(target.BaseURL, scheme, s.store)
-
 			kept := file.Contexts[:0]
 			for _, c := range file.Contexts {
 				if c.Name != target.Name {
@@ -273,6 +282,9 @@ func newConfigDeleteContextCmd(s *appState) *cobra.Command {
 				return cerrors.Wrap(err, cerrors.CategoryConfig, "CONFIG_WRITE",
 					"failed to write the config file")
 			}
+			// Only once the context is gone from the file, so a failed write
+			// never costs a credential a context still names.
+			forgetUnusedCredential(s.store, target, file.Contexts)
 			return s.emit(map[string]any{"context": target.Name, "status": "deleted"})
 		},
 	}
@@ -330,9 +342,34 @@ func persistInitResult(s *appState, result *config.WizardResult, existing config
 	}
 
 	for _, o := range orphans {
-		_ = auth.Forget(o.baseURL, o.scheme, s.store)
+		forgetUnusedCredential(s.store, config.NamedContext{BaseURL: o.baseURL, Auth: config.AuthConfig{Scheme: o.scheme}}, result.File.Contexts)
 	}
 	return out, nil
+}
+
+// credentialKey is the account a context's secret is stored under: the
+// server's host and the scheme. Every context on one server shares it.
+func credentialKey(nc config.NamedContext) string {
+	scheme := nc.Auth.Scheme
+	if scheme == "" {
+		scheme = auth.SchemeBasic
+	}
+	return auth.AccountKey(nc.BaseURL, scheme)
+}
+
+// forgetUnusedCredential removes the secret stored for old unless one of the
+// remaining contexts still resolves it. Another spelling of the same server,
+// or a team preset beside a personal context, shares the secret; deleting it
+// would force a new CalDAV password, which invalidates the previous one for
+// every calendar client. Errors are ignored: an orphan secret is harmless.
+func forgetUnusedCredential(store *auth.Store, old config.NamedContext, remaining []config.NamedContext) {
+	key := credentialKey(old)
+	for _, c := range remaining {
+		if credentialKey(c) == key {
+			return
+		}
+	}
+	_ = store.Delete(key)
 }
 
 // runWizard dispatches to the right wizard implementation based on --pretty.
@@ -366,27 +403,12 @@ func loadExistingSecret(store *auth.Store) func(config.NamedContext) (config.Sec
 }
 
 // wizardHooks builds the credential-validation callback for `config init`. It
-// builds a CalDAV client and Pings the calendar-home: this server requires auth
-// even for a PROPFIND, so a successful Ping proves the credentials work.
+// shares verifyCredential with `auth login`, so both accept a credential on the
+// same evidence.
 func wizardHooks(s *appState) config.WizardHooks {
 	return config.WizardHooks{
 		Validate: func(cfg config.Config, secrets config.Secrets) error {
-			ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
-			defer cancel()
-			cred := credentialFrom(cfg, secrets)
-			if err := cred.Validate(); err != nil {
-				return err
-			}
-			client, err := caldav.Build(caldav.BuildParams{
-				BaseURL:       cfg.BaseURL,
-				AuthDecorator: cred.Decorator(),
-				Timeout:       cfg.Defaults.Timeout,
-				MaxRetries:    cfg.Defaults.MaxRetries,
-			})
-			if err != nil {
-				return err
-			}
-			return client.Ping(ctx)
+			return verifyCredential(s, cfg, credentialFrom(cfg, secrets))
 		},
 	}
 }

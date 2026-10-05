@@ -23,6 +23,8 @@ type WizardHooks struct {
 // given context. Both fields may be nil — the wizard then runs as a pure
 // fresh-setup flow.
 type WizardInputs struct {
+	// Prefill merges team presets for the actual selected destination.
+	Prefill func(string, *NamedContext) (*NamedContext, error)
 	// Existing is the previously persisted config file. nil — or a value with
 	// no contexts — means there is nothing to edit.
 	Existing *File
@@ -86,9 +88,6 @@ type SelectItem struct {
 const (
 	exampleBaseURL  = "https://caldav.wecom.work/"
 	exampleUsername = "you@example.com"
-	// passwordNote reminds the user that WeCom app-specific passwords are
-	// single-issue: fetching a new one invalidates the previous password.
-	passwordNote = "Note: fetching a new app-specific password in WeCom invalidates the old one."
 )
 
 // contextPicks bundles the raw answers the user supplied for one context.
@@ -98,11 +97,12 @@ const (
 // ContextResult. Keeping the routing rules in one place keeps every UI path in
 // agreement.
 type contextPicks struct {
-	Name       string
-	BaseURL    string
-	Username   string
-	Secret     string // raw secret input; ignored when KeepSecret
-	KeepSecret bool   // user opted to retain the previously stored secret
+	CredentialURL string
+	Name          string
+	BaseURL       string
+	Username      string
+	Secret        string // raw secret input; ignored when KeepSecret
+	KeepSecret    bool   // user opted to retain the previously stored secret
 }
 
 // assembleContextResult turns raw picks (plus any kept secret loaded from the
@@ -117,8 +117,9 @@ func assembleContextResult(picks contextPicks, kept Secrets) ContextResult {
 		Name:    NormalizeContextName(picks.Name),
 		BaseURL: picks.BaseURL,
 		Auth: AuthConfig{
-			Scheme:   SchemeBasic,
-			Username: NormalizeUsername(picks.Username),
+			CredentialURL: picks.CredentialURL,
+			Scheme:        SchemeBasic,
+			Username:      NormalizeUsername(picks.Username),
 		},
 	}
 
@@ -280,10 +281,21 @@ func promptNewContextName(d PromptDriver, used map[string]bool) (string, error) 
 // prefill is non-nil, its values are offered as defaults that the user can
 // accept by pressing Enter; otherwise example placeholders are shown.
 func runContextWizard(d PromptDriver, hooks WizardHooks, inputs WizardInputs, name string, prefill *NamedContext) (ContextResult, error) {
-	if name != DefaultContextName || prefill != nil {
+	editingExisting := prefill != nil
+	if inputs.Prefill != nil {
+		var err error
+		prefill, err = inputs.Prefill(name, prefill)
+		if err != nil {
+			return ContextResult{}, err
+		}
+	}
+	if name != DefaultContextName || editingExisting {
 		d.Section(fmt.Sprintf("Context %q", name))
 	}
 	picks := contextPicks{Name: name}
+	if prefill != nil {
+		picks.CredentialURL = prefill.Auth.CredentialURL
+	}
 
 	baseDef := constants.DefaultServerURL
 	if prefill != nil && prefill.BaseURL != "" {
@@ -305,18 +317,28 @@ func runContextWizard(d PromptDriver, hooks WizardHooks, inputs WizardInputs, na
 	}
 	picks.Username = user
 
-	// "Press Enter to keep current" is only meaningful when a secret is
-	// actually stored for the prefill identity.
+	// The guide carries the navigation steps and the warning that a new
+	// password invalidates the previous one; login and missing-credential
+	// recovery print the same lines.
+	guide, guideErr := Guide(Config{BaseURL: picks.BaseURL, Auth: AuthConfig{Scheme: SchemeBasic, CredentialURL: picks.CredentialURL}}, nil)
+	if guideErr != nil {
+		return ContextResult{}, guideErr
+	}
+	for _, line := range guide.Lines() {
+		d.Notice(line)
+	}
+
+	// "Press Enter to keep current" is only meaningful when editing a context
+	// that actually has a secret stored for the prefill identity.
 	var kept Secrets
 	keepable := false
-	if prefill != nil && inputs.LoadSecret != nil {
+	if editingExisting && prefill != nil && inputs.LoadSecret != nil {
 		if loaded, ok := inputs.LoadSecret(*prefill); ok {
 			keepable = true
 			kept = loaded
 		}
 	}
 
-	d.Notice(passwordNote)
 	if keepable {
 		v, keep, err := d.AskSecretOptional("App-specific password")
 		if err != nil {
@@ -358,6 +380,7 @@ type PlainDriver struct {
 	In  io.Reader
 	Out io.Writer
 	r   *bufio.Reader
+	err error
 }
 
 // NewPlainDriver returns a PlainDriver writing to out and reading from in.
@@ -383,12 +406,16 @@ func (p *PlainDriver) Notice(msg string) {
 }
 
 func (p *PlainDriver) AskText(label, def, example string, required bool) (string, error) {
-	return p.text(label, def, example, required), nil
+	value := p.text(label, def, example, required)
+	return value, p.err
 }
 
 func (p *PlainDriver) AskChoice(label string, choices []string, def string) (string, error) {
 	for {
 		v := p.text(fmt.Sprintf("%s (%s)", label, strings.Join(choices, "/")), def, "", true)
+		if p.err != nil {
+			return "", p.err
+		}
 		for _, c := range choices {
 			if strings.EqualFold(v, c) {
 				return c, nil
@@ -407,45 +434,55 @@ func (p *PlainDriver) AskSelect(label string, items []SelectItem, def string) (s
 }
 
 func (p *PlainDriver) AskSecret(label string) (string, error) {
-	for {
-		v, ok := p.readSecret(label)
-		if !ok {
-			// Non-TTY input (piped) has no hidden read; fall back to a line read.
-			return p.text(label, "", "", true), nil
-		}
-		if v != "" {
-			return v, nil
-		}
-		fmt.Fprintln(p.Out, "  value is required")
-	}
+	return p.secret(label, false)
 }
 
 func (p *PlainDriver) AskSecretOptional(label string) (string, bool, error) {
-	prompt := label + " [press Enter to keep current]"
-	if v, ok := p.readSecret(prompt); ok {
-		return v, v == "", nil
-	}
-	fmt.Fprintf(p.Out, "%s: ", prompt)
-	line, _ := p.reader().ReadString('\n')
-	line = strings.TrimSpace(line)
-	return line, line == "", nil
+	value, err := p.secret(label+" [press Enter to keep current]", true)
+	return value, value == "", err
 }
 
-// readSecret reads a secret without echoing when the input is an interactive
-// terminal, returning ok=false when it is not (piped/redirected input, where a
-// hidden read is impossible and the caller should fall back to a line read).
-func (p *PlainDriver) readSecret(label string) (string, bool) {
-	f, ok := p.In.(*os.File)
-	if !ok || !term.IsTerminal(int(f.Fd())) {
-		return "", false
+// secret reads without echoing on an interactive terminal. Piped or redirected
+// input has no hidden read, so it falls back to a line read.
+func (p *PlainDriver) secret(label string, optional bool) (string, error) {
+	if file, ok := p.In.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+		for {
+			fmt.Fprintf(p.Out, "%s: ", label)
+			raw, err := term.ReadPassword(int(file.Fd()))
+			fmt.Fprintln(p.Out)
+			if err != nil {
+				return "", err
+			}
+			value := strings.TrimSpace(string(raw))
+			if optional || value != "" {
+				return value, nil
+			}
+			fmt.Fprintln(p.Out, "  value is required")
+		}
 	}
-	fmt.Fprintf(p.Out, "%s: ", label)
-	b, err := term.ReadPassword(int(f.Fd()))
-	fmt.Fprintln(p.Out)
-	if err != nil {
-		return "", false
+	value := p.text(label, "", "", !optional)
+	return value, p.err
+}
+
+// readLine does not read ahead on terminals, so a later hidden prompt owns its bytes.
+func (p *PlainDriver) readLine() (string, error) {
+	if file, ok := p.In.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+		var line strings.Builder
+		b := make([]byte, 1)
+		for {
+			n, err := file.Read(b)
+			if n > 0 {
+				if b[0] == '\n' {
+					return line.String(), nil
+				}
+				line.WriteByte(b[0])
+			}
+			if err != nil {
+				return line.String(), err
+			}
+		}
 	}
-	return strings.TrimSpace(string(b)), true
+	return p.reader().ReadString('\n')
 }
 
 func (p *PlainDriver) AskConfirm(label string, def bool) (bool, error) {
@@ -454,7 +491,7 @@ func (p *PlainDriver) AskConfirm(label string, def bool) (bool, error) {
 		d = "y"
 	}
 	v := strings.ToLower(p.text(label+" (y/n)", d, "", true))
-	return v == "y" || v == "yes", nil
+	return v == "y" || v == "yes", p.err
 }
 
 // text is the inner prompt helper that AskText / AskChoice / AskConfirm /
@@ -469,12 +506,20 @@ func (p *PlainDriver) text(label, def, example string, required bool) string {
 		default:
 			fmt.Fprintf(p.Out, "%s: ", label)
 		}
-		line, _ := p.reader().ReadString('\n')
+		line, err := p.readLine()
 		line = strings.TrimSpace(line)
 		if line == "" {
 			line = def
 		}
 		if line == "" && required {
+			// Input that ended (a pipe ran dry) can never supply the value;
+			// report it instead of re-prompting forever. A prompt with a
+			// default still takes the default at end of input, as scripted
+			// setups that stop after the password rely on.
+			if err != nil {
+				p.err = err
+				return ""
+			}
 			fmt.Fprintln(p.Out, "  value is required")
 			continue
 		}
