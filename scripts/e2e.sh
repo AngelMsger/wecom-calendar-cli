@@ -258,7 +258,10 @@ assert_stderr_contains "no write, no write-outcome claim" '"code": "BAD_FORMAT"'
   -- "${base[@]}" meta delete e2e-uid task outcome --yes --format bogus
 
 echo "== CLI and Skill upgrade loop =="
-assert_stdout_contains "doctor reports Skill" '"companion-skill"' -- offline "${base[@]}" doctor --no-update-check
+# doctor resolves the stored credential for its server. Point it at a local
+# placeholder so the lookup can never be the developer's real keychain entry
+# for the public endpoint, and so no request can leave the machine.
+assert_stdout_contains "doctor reports Skill" '"companion-skill"' -- offline "${base[@]}" --base-url http://127.0.0.1:9 doctor --no-update-check
 SKILL_DIR="$WORK/skills"
 assert_stdout_contains "skill install alignment" '"alignment": "current"' \
   -- "$BIN" skill install --dir "$SKILL_DIR"
