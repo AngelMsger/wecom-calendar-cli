@@ -38,7 +38,9 @@ binary. After installing or upgrading the package, run
 
 For a team, an installer can preset the service with
 `wecom-calendar-cli config set-context <name>` — no credentials or network
-access needed — and each member then runs `wecom-calendar-cli auth login`. See
+access needed. Each member then runs `wecom-calendar-cli auth reuse` when they
+are already signed in on that server, which needs no password, and
+`wecom-calendar-cli auth login` otherwise. See
 [Team setup and personal login](https://github.com/AngelMsger/wecom-calendar-cli#team-setup-and-personal-login).
 
 See the

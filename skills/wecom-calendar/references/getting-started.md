@@ -116,9 +116,14 @@ up, and do **not** re-initialize config inside the sandbox. Instead:
 
 - **Request elevated permissions** (or otherwise re-run with access to the
   user's real environment), then retry the same command once.
-- If the host retry also reports credentials missing, ask the user to run
-  `wecom-calendar-cli auth login` (or `config init`) in their own terminal, or
-  to export `WECOM_CALENDAR_*` env vars for the session.
+- If the error then lists `auth reuse --dry-run` in its `next_steps`, another
+  context on the same server has a WeCom email and may already be signed in:
+  run it and, when it reports `available`, `auth reuse`. No password is
+  needed.
+- If the host retry also reports credentials missing and there is no login to
+  reuse, ask the user to run `wecom-calendar-cli auth login` (or `config init`)
+  in their own terminal, or to export `WECOM_CALENDAR_*` env vars for the
+  session.
 - Never suggest a new CalDAV password while the store is merely unreadable.
   Issuing one invalidates the password the user's phone and desktop calendar
   clients are using.
@@ -138,5 +143,17 @@ its `calendar.db`, and contexts on the same server share one stored password.
 `config delete-context` therefore removes a stored password only when no other
 context on that server still uses it.
 
-For preset team services, use `config set-context` and `auth guide` before
-personal login; see [team setup](team-setup.md).
+For the same reason a context that has no WeCom email, on a server where
+another context is signed in, needs no password of its own:
+
+```bash
+wecom-calendar-cli --use-context team auth reuse --dry-run   # verify and preview
+wecom-calendar-cli --use-context team auth reuse             # record the email
+```
+
+`auth reuse` verifies the stored password with the other context's email and
+records that email on the selected context. It copies no secret and replaces
+no existing email.
+
+For preset team services, use `config set-context`, then `auth reuse` or
+`auth guide` and personal login; see [team setup](team-setup.md).

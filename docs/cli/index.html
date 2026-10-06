@@ -30,6 +30,7 @@
       <a href="#wecom-calendar-cli-auth-guide">wecom-calendar-cli auth guide</a>
       <a href="#wecom-calendar-cli-auth-login">wecom-calendar-cli auth login</a>
       <a href="#wecom-calendar-cli-auth-logout">wecom-calendar-cli auth logout</a>
+      <a href="#wecom-calendar-cli-auth-reuse">wecom-calendar-cli auth reuse</a>
       <a href="#wecom-calendar-cli-auth-status">wecom-calendar-cli auth status</a>
       </div>
     <div class="side-group">
@@ -152,7 +153,9 @@ and reload the agent context.</p>
 the credential store. WeCom issues the password in its mobile app and has no
 web page for it, so credential_url is empty unless a team configured a page
 of its own; no request is ever sent to that URL. Issuing a new password
-invalidates the previous one, and the instructions say when not to.</p>
+invalidates the previous one, and the instructions say when not to. When
+another context on the same server already has a WeCom email, the guide puts
+auth reuse first: it completes this context without any password.</p>
 
 
     </section>
@@ -177,6 +180,34 @@ credential environment variables for non-interactive execution.</p>
 
 
 
+    </section>
+
+    <section class="cmd" id="wecom-calendar-cli-auth-reuse">
+      <h2>wecom-calendar-cli auth reuse</h2>
+      <p class="short">Reuse an existing login in the selected context without signing in again</p>
+      <pre>wecom-calendar-cli auth reuse [flags]</pre>
+      <p class="long">Fill in the selected context&#39;s missing WeCom email from another context on the
+same service whose stored login still works, instead of asking for a CalDAV
+password. Stored passwords are keyed by server host and scheme, so contexts on
+one server already share one, and nothing is copied. Reuse matches stored
+contexts by complete service URL and scheme, verifies the stored password with
+a candidate&#39;s email through the calendar-home check auth login runs, and
+records that email on the selected context. It never replaces an existing
+email, reads credentials from environment variables, switches the scheme or
+activates a context. --dry-run performs the same read-only verification and
+reports the proposed association. An unchanged or unavailable result is not
+proof of authentication; use auth status to check.</p>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+        <tr><td><code>--dry-run</code></td><td><code>false</code></td><td>verify and preview the identity association without writing</td></tr>
+        <tr><td><code>--from-context</code></td><td></td><td>choose a matching source from config get-contexts when multiple identities are available</td></tr>
+        </tbody>
+      </table>
+      <h3>Examples</h3><pre>  wecom-calendar-cli --use-context team auth reuse --dry-run
+  wecom-calendar-cli --use-context team auth reuse
+  wecom-calendar-cli --use-context team auth reuse --from-context personal</pre>
     </section>
 
     <section class="cmd" id="wecom-calendar-cli-auth-status">

@@ -42,8 +42,11 @@ A request to create, move or cancel an event is outside this CLI. Hand it to
 
 Setup belongs to the user. Reuse the configuration and credentials already in
 place; do not create a context, overwrite a preset or start a login the request
-did not ask for. Never ask for the CalDAV password in chat, and never suggest
-issuing a new one because a credential store could not be read — see
+did not ask for. When the context the task needs lacks only its WeCom email
+and another context on the same server is signed in, `auth reuse` completes it
+from that login; say that you ran it. Never ask for the CalDAV password in
+chat, and never suggest issuing a new one because a credential store could not
+be read or because a login could have been reused — see
 [team-setup.md](team-setup.md#a-new-password-invalidates-the-previous-one).
 
 ## Bounded reads, no open-ended waiting

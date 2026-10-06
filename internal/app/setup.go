@@ -54,16 +54,17 @@ func newAuthGuideCmd(s *appState) *cobra.Command {
 			"the credential store. WeCom issues the password in its mobile app and has no\n" +
 			"web page for it, so credential_url is empty unless a team configured a page\n" +
 			"of its own; no request is ever sent to that URL. Issuing a new password\n" +
-			"invalidates the previous one, and the instructions say when not to.",
+			"invalidates the previous one, and the instructions say when not to. When\n" +
+			"another context on the same server already has a WeCom email, the guide puts\n" +
+			"auth reuse first: it completes this context without any password.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			g, err := config.Guide(s.cfg(), s.resolved.Sources)
 			if err != nil {
 				return err
 			}
 			if name := s.resolved.ActiveContext; name != "" {
-				quoted := "'" + strings.ReplaceAll(name, "'", "'\"'\"'") + "'"
 				for i, step := range g.NextSteps {
-					g.NextSteps[i] = strings.Replace(step, " auth ", " --use-context "+quoted+" auth ", 1)
+					g.NextSteps[i] = strings.Replace(step, " auth ", " --use-context "+config.QuoteContextArg(name)+" auth ", 1)
 				}
 			}
 			return s.emit(g)

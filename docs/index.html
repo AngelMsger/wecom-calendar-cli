@@ -373,7 +373,7 @@ npm install -g @angelmsger/wecom-calendar-cli</pre>
     </div>
     <p style="margin-top:22px;color:var(--muted)"><strong style="color:var(--text)">Credential note.</strong> Auth is HTTP Basic — your WeCom email plus an
       <em>app-specific CalDAV password</em> from the WeCom mobile app (Workbench → Calendar → settings → Sync to other calendars). Fetching a new one invalidates the previous.</p>
-    <p style="margin-top:14px;color:var(--muted)"><strong style="color:var(--text)">Team setup.</strong> Preset the service once with <code>wecom-calendar-cli config set-context</code> — offline, without credentials — and each member runs <code>auth guide</code> and <code>auth login</code> for their own password.
+    <p style="margin-top:14px;color:var(--muted)"><strong style="color:var(--text)">Team setup.</strong> Preset the service once with <code>wecom-calendar-cli config set-context</code> — offline, without credentials — and each member reuses the login they already have with <code>auth reuse</code>, or runs <code>auth guide</code> and <code>auth login</code> for their own password.
       <a href="https://github.com/AngelMsger/wecom-calendar-cli#team-setup-and-personal-login">Team setup and personal login</a>.</p>
   </div>
 </section>
@@ -432,7 +432,7 @@ npm install -g @angelmsger/wecom-calendar-cli</pre>
       </a>
       <a class="card cmd-group" href="cli/#wecom-calendar-cli-auth">
         <span class="cg-name">auth</span>
-        <p>Find out where the CalDAV password comes from, then verify and store it with your WeCom email.</p>
+        <p>Find out where the CalDAV password comes from, verify and store it with your WeCom email, or reuse the login another context already has.</p>
       </a>
       <a class="card cmd-group" href="cli/#wecom-calendar-cli-doctor">
         <span class="cg-name">doctor</span>

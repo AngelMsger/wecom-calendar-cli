@@ -15,10 +15,25 @@ run() {
   env -i PATH="$PATH" HOME="$WORK" NO_COLOR=1 WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER=1 \
     "$BIN" --config "$WORK/config" "$@"
 }
+# run_at <config-dir> <args...> is `run` against another scratch config directory.
+run_at() {
+  local dir="$1"; shift
+  env -i PATH="$PATH" HOME="$WORK" NO_COLOR=1 WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER=1 \
+    "$BIN" --config "$dir" "$@"
+}
 fail() { echo "FAIL: $1" >&2; exit 1; }
 require() { [[ "$1" == *"$2"* ]] || fail "expected $2"; }
 refuse() { [[ "$1" != *"$2"* ]] || fail "unexpected $2"; }
 absent() { [[ ! -e "$1" ]] || fail "$1 must not exist"; }
+# refused <exit> <code> <cmd...>: the command fails with that exit code and
+# error code and prints nothing on stdout. The error is left in error.json.
+refused() {
+  local want="$1" code="$2" got=0; shift 2
+  "$@" >out.json 2>error.json || got=$?
+  [[ "$got" == "$want" ]] || fail "$code: expected exit $want, got $got"
+  [[ ! -s out.json ]] || fail "$code: a refused command wrote to stdout"
+  require "$(cat error.json)" "\"code\": \"$code\""
+}
 
 out="$(run config set-context team --base-url https://offline.invalid/deploy --auth-scheme basic --dry-run)"
 require "$out" '"dry_run": true'
@@ -83,6 +98,68 @@ if run auth login --base-url https://second.invalid/elsewhere </dev/null >out.js
   fail 'auth login accepted another service URL'
 fi
 require "$(cat error.json)" CONTEXT_BASE_URL_MISMATCH; require "$(cat error.json)" 'no credential was stored'
-absent "$WORK/config/credentials"
-[[ "$(ls -A "$WORK/config")" == "config.yaml" ]] || fail "setup left more than config.yaml: $(ls -A "$WORK/config")"
-echo 'PASS: offline team setup, idempotency, conflict, activation, environment-only guidance and login guards'
+
+# auth reuse, on the paths that need neither a server nor the credential store.
+# No context above carries a WeCom email, so none can be a source and no
+# credential is read. A verified preview and the write are covered by the unit
+# tests against an httptest stub and the mocked keyring. Never add a step that
+# runs `auth reuse` where a source has an email: it would read the OS keychain.
+before="$(cat "$WORK/config/config.yaml")"
+out="$(run --use-context plain auth reuse --dry-run)"
+# The no-change result the Skill shows, byte for byte.
+[[ "$out" == $'{\n  "changed": false,\n  "context": "plain",\n  "dry_run": true,\n  "reason": "no matching stored identity can be reused",\n  "state": "unavailable",\n  "verified": false\n}' ]] \
+  || fail "reuse preview changed: $out"
+refused 6 AUTH_REUSE_SOURCE_NOT_FOUND run --use-context plain auth reuse --from-context absent
+require "$(cat error.json)" '"wecom-calendar-cli config get-contexts"'
+# A source on another server is refused before any credential is read.
+refused 11 AUTH_REUSE_SOURCE_MISMATCH run --use-context plain auth reuse --from-context second
+require "$(cat error.json)" '"wecom-calendar-cli config get-contexts"'
+refused 11 AUTH_REUSE_TARGET_MISMATCH run --use-context plain --base-url https://second.invalid auth reuse
+require "$(cat error.json)" "--use-context 'plain' config show --explain"
+refused 3 AUTH_REUSE_TARGET_MISSING run_at "$WORK/empty" auth reuse
+require "$(cat error.json)" '"wecom-calendar-cli config set-context <name>"'
+# None of them is a password problem, and each says so.
+require "$(cat error.json)" 'do not issue a new CalDAV password'
+# The recovery those errors advertise is a command this CLI has. The context
+# listing is `config get-contexts` here, not the `config contexts` of some siblings.
+out="$(run config get-contexts)"; require "$out" '"name": "plain"'
+refused 2 UNKNOWN_COMMAND run config contexts
+[[ "$(cat "$WORK/config/config.yaml")" == "$before" ]] || fail 'a reuse preview or a refused reuse changed the config'
+
+# A member who is already signed in on the public endpoint. No offline command
+# records a WeCom email, so this file is written by hand; the address is a
+# placeholder and no password exists anywhere.
+mkdir -p "$WORK/member"
+cat >"$WORK/member/config.yaml" <<'YAML'
+current_context: personal
+contexts:
+  - name: personal
+    server: https://caldav.wecom.work/
+    auth:
+      scheme: basic
+      username: member@example.invalid
+YAML
+# A preset on that server, the guide and the guide's next steps all lead with
+# reuse, ahead of anything that asks for a password. They read the file only.
+out="$(run_at "$WORK/member" config set-context team)"
+require "$out" "\"wecom-calendar-cli --use-context 'team' auth reuse --dry-run\","
+out="$(run_at "$WORK/member" --use-context team auth guide)"
+require "$out" 'No password is asked for and none is copied'
+# The projection the Skill shows for this case, byte for byte.
+out="$(run_at "$WORK/member" --use-context team auth guide --fields next_steps)"
+[[ "$out" == $'{\n  "next_steps": [\n    "wecom-calendar-cli --use-context \'team\' auth reuse --dry-run",\n    "wecom-calendar-cli --use-context \'team\' auth login"\n  ]\n}' ]] \
+  || fail "guide next steps changed: $out"
+# A context that has its email is left as it is, and is not offered reuse.
+before="$(cat "$WORK/member/config.yaml")"
+out="$(run_at "$WORK/member" --use-context personal auth reuse)"
+[[ "$out" == $'{\n  "changed": false,\n  "context": "personal",\n  "dry_run": false,\n  "reason": "destination identity is already configured",\n  "state": "unchanged",\n  "verified": false\n}' ]] \
+  || fail "reuse on a complete context changed: $out"
+refuse "$(run_at "$WORK/member" --use-context personal auth guide)" 'auth reuse'
+[[ "$(cat "$WORK/member/config.yaml")" == "$before" ]] || fail 'an unchanged reuse rewrote the config'
+
+for dir in config member; do
+  absent "$WORK/$dir/credentials"
+  [[ "$(ls -A "$WORK/$dir")" == "config.yaml" ]] || fail "setup left more than config.yaml in $dir: $(ls -A "$WORK/$dir")"
+done
+absent "$WORK/empty"
+echo 'PASS: offline team setup, idempotency, conflict, activation, environment-only guidance, login guards and reuse guards'

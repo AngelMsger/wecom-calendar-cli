@@ -36,12 +36,12 @@ the differing fields of a preset conflict, or what a partial login stored.
 | 3 | config | config/credential resolution failed; inspect `code` and `recovery` before reconfiguring |
 | 4 | auth | credentials rejected (401); run `auth status`, then the user runs `auth login` |
 | 5 | permission | valid login, no access (403), or local `READONLY_BLOCKED` |
-| 6 | not_found | the event is not in the local store, or the server answered 404; a missing metadata entry is not an error |
+| 6 | not_found | the event is not in the local store, the server answered 404, or `auth reuse --from-context` names an unknown context; a missing metadata entry is not an error |
 | 7 | rate_limit | server throttling (429); wait, then retry; avoid `sync --full` in a tight loop |
 | 8 | network | DNS/TLS/timeout; check `WECOM_CALENDAR_SERVER`, run `doctor` |
 | 9 | server | CalDAV 5xx; retry later |
 | 10 | parse | a response (or a `.ics` body) could not be decoded; likely a client bug — re-run with `--verbose` |
-| 11 | conflict | a preset conflicts with an existing context (`CONFIG_CONTEXT_CONFLICT`), or the server answered 409; `meta` writes never conflict (see below) |
+| 11 | conflict | a preset conflicts with an existing context (`CONFIG_CONTEXT_CONFLICT`), `auth reuse` needs a choice or saw a change (`AUTH_REUSE_*`), or the server answered 409; `meta` writes never conflict (see below) |
 
 ## Writes that succeeded
 
@@ -95,11 +95,35 @@ Two results look like failures and are not:
   In a sandbox it usually means the user's credential is just unreadable from
   here: request elevation and retry. Only when the host retry also reports it
   missing has the user not configured one — then follow the later
-  `next_steps`: `auth guide`, and the user runs `auth login` (or `config init`)
-  or exports `WECOM_CALENDAR_*`.
-- **`AUTH_NO_BASIC`** (config, 3) → an email or a password is missing, for
-  example `WECOM_CALENDAR_PASSWORD` without a username. `next_steps` include
-  `auth guide`.
+  `next_steps` in order: `auth reuse --dry-run` when it is listed, then
+  `auth guide`, and the user runs `auth login` (or `config init`) or exports
+  `WECOM_CALENDAR_*`.
+- **`AUTH_NO_BASIC`** (config, 3) → an email or a password is missing. The
+  common case is a team preset beside a signed-in personal context: contexts
+  on one server share the stored password, so only the email is missing. The
+  `hint` then says so and `next_steps` starts with `auth reuse --dry-run` —
+  run it and, when it reports `available`, `auth reuse`; no password is
+  needed. Otherwise (for example `WECOM_CALENDAR_PASSWORD` without a username)
+  `next_steps` end with `auth guide`.
+- **`AUTH_REUSE_AMBIGUOUS`** (conflict, 11) → `auth reuse` verified more than
+  one email for the server. `details.contexts` names the candidates; repeat
+  with `--from-context <name>`, taking the name from `config get-contexts`.
+- **`AUTH_REUSE_SOURCE_NOT_FOUND`** (not_found, 6) /
+  **`AUTH_REUSE_SOURCE_MISMATCH`** (conflict, 11) → `--from-context` names a
+  context that does not exist, or one on another server or scheme.
+- **`AUTH_REUSE_TARGET_MISSING`** (config, 3) /
+  **`AUTH_REUSE_TARGET_MISMATCH`** (conflict, 11) → the selected context is
+  not in the config file, or a `--base-url` / `--auth-scheme` override selects
+  another service than it stores.
+- **`AUTH_REUSE_CONFIG_CHANGED`** / **`AUTH_REUSE_CREDENTIAL_CHANGED`**
+  (conflict, 11) / **`AUTH_REUSE_WRITE_FAILED`** (config, 3) → the config file
+  or the stored password changed during verification, or the result could not
+  be written. Nothing was saved; run `auth reuse --dry-run` again. No
+  `AUTH_REUSE_*` error is a reason to issue a CalDAV password. See
+  [team-setup.md](team-setup.md#reuse-an-existing-login--auth-reuse).
+- **`CREDENTIAL_SERVICE_MISMATCH`** (config, 3) → the service URL in effect is
+  not the one the stored credential belongs to. Select the context for the
+  intended service; this is not a password problem.
 - **`CALDAV_AUTH`** (auth, 4) → the server rejected the CalDAV password.
   The most common cause is that a **new app-specific password was fetched in the
   WeCom app, invalidating the old one** — the user gets a fresh one (Workbench →
@@ -166,7 +190,8 @@ Two results look like failures and are not:
   a replacement config in a sandbox.
 - **config (3) from credential resolution** → keep "the store is inaccessible"
   apart from "a credential must be acquired". The first is a host retry and
-  nothing else. See
+  nothing else. Before the second, check for a login to reuse: when
+  `next_steps` lists `auth reuse --dry-run`, run it first. See
   [team-setup.md](team-setup.md#a-new-password-invalidates-the-previous-one).
 - **not_found (6)** → verify the calendar `id` or event `uid` from a fresh
   `calendar list` / `event list`; if the store looks empty, you probably have

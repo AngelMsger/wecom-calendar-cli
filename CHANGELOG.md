@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`auth reuse`.** Gives the selected context the WeCom email of another
+  context on the same server whose stored login still verifies, so a team
+  preset beside a personal context needs no CalDAV password. Stored passwords
+  are keyed by server host and scheme, so contexts on one server already share
+  one: the command copies no secret and records only the email. It matches the
+  complete normalized server URL and the scheme before any credential access,
+  verifies with the calendar-home request `auth login` and `doctor` send,
+  leaves a context that already has an email unchanged, and never reads
+  credentials from the environment, switches the scheme or activates a
+  context. `--dry-run` verifies and previews; `--from-context <name>` chooses a
+  source. The result has `context`, `state` (`available`, `reused`,
+  `unchanged`, `unavailable`), `changed`, `verified`, `dry_run`, and
+  `source_context` or `reason`. `unchanged` and `unavailable` are normal
+  results and not evidence of authentication.
+- **Reuse errors.** Several verified identities return `AUTH_REUSE_AMBIGUOUS`
+  (exit 11) with the candidate contexts in `details`. `--from-context` naming
+  an unknown context or one on another server returns
+  `AUTH_REUSE_SOURCE_NOT_FOUND` (exit 6) or `AUTH_REUSE_SOURCE_MISMATCH`; a
+  missing destination or a service override returns
+  `AUTH_REUSE_TARGET_MISSING` or `AUTH_REUSE_TARGET_MISMATCH`. An edit to the
+  config file or a replaced password during verification stops the write with
+  `AUTH_REUSE_CONFIG_CHANGED` or `AUTH_REUSE_CREDENTIAL_CHANGED`, and a failed
+  write is `AUTH_REUSE_WRITE_FAILED`. Each names a command that exists and says
+  that no CalDAV password should be issued. Network, permission and
+  credential-store failures keep their own errors.
+
+### Changed
+
+- **Reuse is offered before a new password.** A new CalDAV password
+  invalidates the previous one, so when the selected context has no WeCom
+  email and another stored context on the same server has one, the CLI now
+  points at `auth reuse --dry-run` first: in the `next_steps` of
+  `config set-context` and `auth guide`, at the top of the guide's
+  `instructions`, as the first step of `AUTH_NO_BASIC` with a hint that
+  explains it, and ahead of the login steps of
+  `CREDENTIAL_NOT_VISIBLE_OR_MISSING` and of an unhealthy `doctor`. The check
+  reads only the config file. `CREDENTIAL_STORE_INACCESSIBLE` is unchanged and
+  never suggests it, and nothing changes for a context without such a
+  neighbour.
+- **An equivalent server URL override keeps its stored credential.** A
+  `--base-url` or `WECOM_CALENDAR_SERVER` that only re-spells the selected
+  context's URL, such as the host in another case or an explicit default port,
+  now resolves the credential stored under the context's own spelling, and
+  `auth logout` removes that entry. Previously it looked up a different key and
+  reported the credential as missing. An override naming a different complete
+  URL cannot use that entry (`CREDENTIAL_SERVICE_MISMATCH`).
+- **Companion Skill covers login reuse.** The Skill routes a context that
+  lacks only its WeCom email to `auth reuse`, ahead of acquiring a password,
+  and documents the result fields, states and errors in `team-setup.md`. Skill
+  bumped to `0.5.0`.
+
 ## [0.3.0] - 2026-10-05
 
 ### Added

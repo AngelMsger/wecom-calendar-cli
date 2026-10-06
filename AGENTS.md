@@ -90,7 +90,7 @@ Empirically verified; generic CalDAV libraries fail here:
 `sync` · `expand` · `calendar list` · `event list|get` ·
 `meta set|get|list|delete` · `whoami` ·
 `config init|show|path|set-context|get-contexts|use-context|delete-context` ·
-`auth guide|status|login|logout` · `doctor` ·
+`auth guide|reuse|status|login|logout` · `doctor` ·
 `skill status|install|path|show|uninstall` · `version` · `completion`.
 
 Contracts (family baseline): stdout is machine-readable data, notices/errors go
@@ -353,11 +353,14 @@ test:
   a host of its own; here nearly every context points at the one public
   endpoint, so a preset and a personal context share a stored password, and a
   preset's normalized URL differs in spelling from the wizard default. The
-  reference forgets the old secret whenever an edited context's URL string
-  changes, and on every `delete-context`. That would delete the password in
-  use and force a new one, so `forgetUnusedCredential` forgets a secret only
-  when no remaining context resolves the same account, and `delete-context`
-  does so after its config write. `internal/app/config_credentials_test.go`.
+  reference, at the commit this was ported from, forgot the old secret
+  whenever an edited context's URL string changed, and on every
+  `delete-context`. That would delete the password in use and force a new one,
+  so `forgetUnusedCredential` forgets a secret only when no remaining context
+  resolves the same account, and `delete-context` does so after its config
+  write. The family has since adopted this rule (`jira-cli` `ec08d63`, shared
+  standard §6.5), so it is no longer a difference.
+  `internal/app/config_credentials_test.go`.
 
 Contexts do not partition credentials or data, and this port did not change
 that: the keychain account ignores the context and the username, and the store
@@ -366,10 +369,148 @@ the same server overwrite each other's stored password.
 
 `scripts/e2e-setup.sh`, run at the end of `scripts/e2e.sh`, is the reference
 script with the WeCom checks added: the default endpoint, the guide without a
-URL, the scheme, and the two guards `auth login` applies before it prompts. It
-runs with an empty environment and a scratch `HOME`. `auth login` needs a
-terminal, so its verified path is covered by unit tests against an `httptest`
-stub rather than by the shell suite.
+URL, the scheme, the two guards `auth login` applies before it prompts, and
+the `auth reuse` paths described below. It runs with an empty environment and a
+scratch `HOME`. `auth login` needs a terminal, so its verified path is covered
+by unit tests against an `httptest` stub rather than by the shell suite.
+
+### Reusing an existing login
+
+Ported from `jira-cli` (`a918044`) with its follow-ups `ec08d63` and `3ad27a6`,
+and cross-checked against `prometheus-cli`, the sibling without deployment
+flavors. This is the shared standard's §6.5. `internal/app/auth_reuse.go` holds
+the command and `reuseAuthentication`, whose `reuseServices` keep resolution,
+verification and the config read and write independently testable.
+`internal/config/stored_context.go` holds `StoredContext`, which resolves a
+context from the file and the built-in defaults only, the service match
+`SameService`, the candidate list `ReuseSources`, and the two loader hooks.
+`auth.CredentialLookupURL` and `auth.ForgetForConfig` keep the stored lookup
+key under an equivalent URL override.
+
+**What reuse adds here.** The keychain account is `<host>:<scheme>`, so
+contexts on one server already share one stored password; that limitation is
+recorded above and this port does not change the key. A team preset beside a
+personal context therefore finds the password and lacks only the WeCom email,
+and every command there fails with `AUTH_NO_BASIC`. `auth reuse` closes exactly
+that gap: it verifies the stored password with another context's email and
+records that email on the destination. It never saves, copies or moves a
+secret — `reuseServices` has no save. Besides the email it writes the scheme
+the credential resolved with, which is always `basic`, and it re-spells the
+destination's server URL like the source's when the two spellings resolve
+different store keys. Say this plainly wherever the command is described;
+"reuse a credential" would promise more than it does.
+
+Keep `auth reuse` separate from `config set-context`, which stays offline and
+credential-free. Match the complete normalized URL and the scheme before any
+credential access, preserve an email the destination already has, verify
+through `verifyCredential` — the `Ping` that `auth login`, `config init` and
+`doctor` run — before recording anything, and return network, permission and
+credential-store failures as they are. Never copy a secret, take an identity
+from the environment, switch the scheme or activate a context. Re-read the
+config file and re-resolve the source credential immediately before the write,
+and stop when either changed. The result is `context`, `state` (`available`,
+`reused`, `unchanged`, `unavailable`), `changed`, `verified`, `dry_run`, and
+`source_context` or `reason`. Read-only mode blocks only the metadata writes,
+so reuse, like login, is not gated by it. When changing this flow, cover
+dry-run, ambiguity, scope mismatch, a preserved destination identity,
+concurrent config edits, credential rotation, a fresh-load resolution and each
+operational failure.
+
+Recovery steps must name commands that exist in this CLI. The context listing
+is `config get-contexts` here, not the `config contexts` some siblings use.
+`assertRunnableStep` resolves a step against the command tree, flags and
+arguments included; run every advertised step of a new error through it.
+
+The differences below are intentional. Each follows from the domain and has a
+test:
+
+- **The provider scope is the service URL alone.** There is one scheme and no
+  deployment flavor, organization or tenant, so `SameService` compares the
+  complete normalized URL and the scheme and nothing else. `reuseFlavor`,
+  `reuseVerificationConfig` and the flavor cases of the reference tests have no
+  subject. The reference's branch for the `none` scheme has none either: a
+  destination stored with any scheme but `basic` is a configuration error, and
+  `ValidateService` reports it before a source is matched or a secret read.
+  `TestSameServiceComparesTheCompleteURLAndTheScheme`,
+  `TestAuthReuseMatchesCompleteServiceBeforeCredentialAccess`,
+  `TestAuthReuseRefusesAnUnsupportedSchemeBeforeCredentialAccess`.
+- **Only a context with an email can be a source.** Basic authentication needs
+  the email, so a context without one has no identity to offer. The reference
+  still resolves such a source when its store key differs, because a token
+  identifies an account on its own; here `ReuseSources` drops it before any
+  credential is read. For the same reason the reference's check for a
+  destination that already works without a username is not ported, nor is
+  `TestAuthReusePreservesWorkingTokenWithoutUsername`: a destination without an
+  email cannot authenticate. Of the skippable "no credential" codes only
+  `AUTH_NO_BASIC` exists. A match always changes the destination, so the
+  reference's "matched but unchanged" branch is gone too.
+  `TestAuthReuseIgnoresContextsWithoutAnIdentity`,
+  `TestReuseSourcesAreSameServiceContextsThatCarryAnIdentity`.
+- **Verification selects the identity.** One stored password belongs to one
+  WeCom account. With two personal contexts on a server, the one whose email
+  the server rejects (401) is skipped and the other is recorded, so there is
+  normally nothing to choose. `AUTH_REUSE_AMBIGUOUS` remains for the cases
+  that can still produce two verified identities: URL spellings that keep
+  passwords under different keys, or a server that accepts one password for
+  two emails. An email is compared the way `whoami` and `is_self` compare it,
+  so two spellings of one address are one identity; the spelling recorded is
+  the one that was verified.
+  `TestAuthReusePicksTheIdentityTheSharedPasswordBelongsTo`,
+  `TestAuthReuseAmbiguityAndExplicitSelection`,
+  `TestAuthReuseTreatsEmailCaseAsOneIdentity`.
+- **Verification has no identity to read back.** As with login, the 207 from
+  the calendar home is the evidence, and `AUTH_IDENTITY_UNAVAILABLE` is not
+  ported. The reference test for that code becomes its analogue: an answer
+  that is not CalDAV is an error the caller sees, never an `unavailable`.
+  `TestAuthReuseDoesNotHideAnAnswerThatIsNotCalDAV`,
+  `TestAuthReuseCommandVerifiesNativeStoredCredential`.
+- **The server URL has a default.** A destination or a source may store no
+  URL and then resolves the public endpoint. `AUTH_REUSE_TARGET_MISSING`
+  therefore means only that the context is not in the file, its recovery is
+  `config set-context <name>` without `--base-url`, and store keys are compared
+  on resolved URLs so a source without a stored URL cannot blank the
+  destination's. `TestAuthReuseFollowsTheDefaultEndpoint`.
+- **Reuse is offered before a password.** This is the one addition the
+  reference does not have, and the reason is the cost of a new password. The
+  loader sets the runtime-only `Config.MayReuse` when the context in effect
+  has no email, the runtime supplies none, no service override differs from
+  the stored context, and `ReuseSources` is not empty. It reads only the file.
+  Where it is set, `auth reuse --dry-run` goes first in the `next_steps` and
+  `instructions` of `auth guide`, first in `AUTH_NO_BASIC` with a hint that
+  explains it, after the host retry and ahead of the login step in
+  `CREDENTIAL_NOT_VISIBLE_OR_MISSING`, and ahead of "configure credentials" in
+  an unhealthy `doctor`. `PlanServiceContext` applies the same test to the
+  planned file. `CREDENTIAL_STORE_INACCESSIBLE` never offers it: reuse reads
+  the same store. Be honest about the middle case: with one shared key, a
+  password that is missing for the destination is missing for the source, and
+  reuse then reports the same error; it helps there only when another spelling
+  of the server keeps a password under a key of its own.
+  `TestLoaderOffersReuseOnlyWhereItCouldCompleteTheContext`,
+  `TestGuideLeadsWithReuseOnlyWhenOffered`,
+  `TestPresetLeadsWithReuseWhenAnotherContextHasAnIdentity`,
+  `TestMissingIdentityOffersReuseFirst`,
+  `TestMissingCredentialOffersReuseAfterTheHostRetry`,
+  `TestInaccessibleStoreNeverSuggestsAcquiringACredential`,
+  `TestAuthReuseIsOfferedBeforeAcquiringAPassword`,
+  `TestAuthReuseKeepsInaccessibleStoreRecoveryOnTheHost`.
+- **Every reuse error carries its own hint and steps.** The category defaults
+  in `pkg/errors` point at `config init`, `auth login` and `sync`, any of which
+  is wrong for a selection or concurrency failure and two of which lead to a
+  password. Each `AUTH_REUSE_*` error and `CREDENTIAL_SERVICE_MISMATCH`
+  therefore sets both, and says that no password should be issued.
+  `TestAuthReuseRecoveryNamesRealCommands`.
+- **The shell suite stops at the credential store.** The reference added no
+  end-to-end step for reuse. `scripts/e2e-setup.sh` covers what needs neither
+  a server nor a credential: the no-change results, the four guards, the
+  context listing they advertise, and the offer in a preset and in the guide.
+  A verified preview and the write run against an `httptest` stub and the
+  mocked keyring instead. Never add a shell step that runs `auth reuse` where
+  a source has an email: it would read the OS keychain under the scratch
+  `HOME`.
+
+The siblings document this contract in `docs/installation.md` and
+`docs/technical-design.md`. Here the user-facing text is the README section
+"Reuse an existing login" and the design notes are this section.
 
 ### Companion Skill rules
 
@@ -404,20 +545,26 @@ agent-owned metadata layer, companion Skill, generated CLI docs, update-notice,
 CI (gofmt/vet/unit tests/`scripts/e2e.sh`/docs-drift on Linux + Windows
 runtime), and npm distribution.
 
-The team presets, `auth guide` and the persistence steps of `auth login` are
-verified with an `httptest` stub and the offline e2e suite, not against the
-live server. The live check `auth login` runs is the same `Ping` as `doctor`.
+The team presets, `auth guide`, `auth reuse` and the persistence steps of
+`auth login` are verified with an `httptest` stub and the offline e2e suite,
+not against the live server. The live check `auth login` and `auth reuse` run
+is the same `Ping` as `doctor`.
 
 **Alignment.** The shared contracts the family adopted while this project was
-archived are all ported or recorded as intentional differences. The rule on
-replying to human-authored comments, adopted in the same period, has nothing to
-apply to: this CLI has no comment surface.
+archived are all ported or recorded as intentional differences. The first pass
+after the reinstatement overlooked one of them, `auth reuse`, which all six
+siblings gained on 2026-09-24; it was ported on 2026-10-06. To check this
+claim again, list each sibling's commits from 2026-08-19 to 2026-10-05 and
+match every shared contract against a section of this file, rather than
+starting from the sections already here. The rule on replying to human-authored
+comments, adopted in the same period, has nothing to apply to: this CLI has no
+comment surface.
 
 **Ported, with intentional differences.** The CLI and Skill upgrade loop, the
 Skill collaboration and write-recovery rules, the time-window contract, NDJSON
-continuation metadata, and team service presets with personal login are in
-place; the sections above describe them. They differ from the siblings only
-where the domain does:
+continuation metadata, team service presets with personal login, and reuse of
+an existing login are in place; the sections above describe them. They differ
+from the siblings only where the domain does:
 
 - The time-window contract keeps the family vocabulary and rules, with the
   four calendar differences, the pageability rule, the `expand` exception and
@@ -432,11 +579,23 @@ where the domain does:
   under "Team service presets and personal login": no web credential page, a
   password that a new one invalidates, one scheme, a default server URL,
   verification without an identity read-back, a path that is compared but not
-  routed, the scripted wizard flow, and guarded credential cleanup. Covered by
+  routed, the scripted wizard flow, and guarded credential cleanup, which the
+  family has since adopted. Covered by
   `internal/config/{setup,file,wizard}_test.go`,
   `internal/auth/resolver_test.go`,
   `internal/app/{auth_login,config_credentials}_test.go` and
   `scripts/e2e-setup.sh`.
+- Reuse of an existing login keeps the family's command, flags, result fields,
+  states, error codes and write guards, with the eight differences listed
+  under "Reusing an existing login": a provider scope that is the service URL
+  alone, sources that must carry an email, verification that selects the
+  identity, no identity read-back, a default server URL, reuse offered before
+  a password, error-specific recovery, and a shell suite that stops at the
+  credential store. The flavor, `none`-scheme and token-only parts of the
+  reference have no subject. Covered by `internal/app/auth_reuse_test.go`,
+  `internal/config/stored_context_test.go`, `internal/auth/resolver_test.go`
+  and `scripts/e2e-setup.sh`. The verified path has run only against an
+  `httptest` stub, not against the live server.
 - `WRITE_SUCCEEDED_READ_FAILED`, `WRITE_SUCCEEDED_RESPONSE_INVALID`, the
   "outcome unknown" wrapper for write failures and the partial-batch error are
   not ported, for the reasons under "Write outcomes".

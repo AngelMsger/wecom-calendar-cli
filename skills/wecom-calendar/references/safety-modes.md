@@ -110,14 +110,14 @@ CLI self-configuration and data sync are out of scope, otherwise an agent that
 enabled read-only would lose the ability to recover or refresh:
 
 - `config init`, `config set-context`, `config use-context`, `auth login`,
-  `auth logout`
+  `auth reuse`, `auth logout`
 - `skill install`, `skill uninstall`
 - `sync` — it does not write metadata; read-only protects the metadata layer,
   not the store's synced facts.
 
-`config set-context` has its own `--dry-run`, which previews a service preset
-without writing the config file. It is unrelated to read-only mode; see
-[team-setup.md](team-setup.md).
+`config set-context` and `auth reuse` have their own `--dry-run`, which
+previews a service preset or an identity association without writing the config
+file. It is unrelated to read-only mode; see [team-setup.md](team-setup.md).
 
 ## Recommended pattern for agents
 

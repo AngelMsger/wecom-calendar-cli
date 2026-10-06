@@ -48,6 +48,15 @@ type NamedContext struct {
 
 // Config holds the resolved, non-secret configuration.
 type Config struct {
+	// CredentialBaseURL preserves an equivalent stored URL's native lookup key.
+	// It is runtime-only and never changes the request destination.
+	CredentialBaseURL string `yaml:"-" json:"-"`
+	// MayReuse marks a context that `auth reuse` could complete: it has no WeCom
+	// email, and another stored context on the same service has one. It is
+	// runtime-only and unverified — the loader reads the config file, never a
+	// credential — and exists so recovery can offer reuse before a new CalDAV
+	// password, which would invalidate the previous one.
+	MayReuse bool       `yaml:"-" json:"-"`
 	BaseURL  string     `yaml:"server"`
 	Auth     AuthConfig `yaml:"auth"`
 	Defaults Defaults   `yaml:"defaults"`

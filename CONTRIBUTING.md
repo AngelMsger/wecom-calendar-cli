@@ -46,7 +46,8 @@ in `build/npm/`.
   flags and their deprecated aliases, cursor handling, NDJSON continuation,
   exit codes, write outcomes, the metadata sequences the Skill documents, and
   the CLI/Skill upgrade loop). It ends with `scripts/e2e-setup.sh`: team
-  presets, the acquisition guide and the login guards, run with an empty
+  presets, the acquisition guide, the login guards and the `auth reuse` paths
+  that reach neither a server nor the credential store, run with an empty
   environment and a scratch `HOME`. No network or credentials required; it
   needs the Go toolchain to build one version-pinned binary and to seed a
   scratch store with `test/seedstore`.
@@ -105,6 +106,19 @@ new one invalidates the previous one. Use `keyring.MockInit()` or a fake
 keyring and an `httptest` stub; a test must not reach the OS keychain or a real
 server. The contract and its differences from the siblings are in
 [`AGENTS.md`](AGENTS.md#team-service-presets-and-personal-login).
+
+For changes to `auth reuse`, match the complete service URL and the scheme
+before any credential access, and keep the command to what it does: it records
+a verified WeCom email on a context and never saves, copies or moves a secret.
+Cover dry-run, ambiguity, scope mismatch, a preserved destination identity, an
+edit to the config file and a rotated credential during verification, a
+fresh-load resolution, and each operational failure returned unchanged. Give
+every new error its own hint and `next_steps`, and pass each advertised step
+through `assertRunnableStep`, which resolves it against the command tree: the
+context listing is `config get-contexts` here. Do not add a step to
+`scripts/e2e-setup.sh` that runs `auth reuse` where a source has an email,
+because it would read the OS keychain. The contract is in
+[`AGENTS.md`](AGENTS.md#reusing-an-existing-login).
 
 ## Commits, changelog & versioning
 

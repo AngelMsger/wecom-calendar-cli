@@ -199,8 +199,10 @@ func Load(opt LoadOptions) (*Resolved, error) {
 	}
 
 	resolveAuthDefaults(merged, sources)
+	cfg := preserveCredentialLookup(configFromMap(merged), file, ctxName)
+	cfg.MayReuse = mayReuse(cfg, file, ctxName)
 	return &Resolved{
-		Config: configFromMap(merged),
+		Config: cfg,
 		Secrets: Secrets{
 			Password: merged[fieldPassword],
 		},

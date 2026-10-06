@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
+	"github.com/angelmsger/wecom-calendar-cli/internal/config"
 	"github.com/angelmsger/wecom-calendar-cli/internal/update"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/caldav"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
@@ -47,12 +48,17 @@ func newDoctorCmd(s *appState) *cobra.Command {
 				return err
 			}
 			if !report.Healthy {
+				steps := []string{
+					"Review the failing checks and their status/recovery_scope fields above.",
+					"When recovery_scope is host, retry `wecom-calendar-cli doctor` with access to the host user environment.",
+				}
+				if reportOffersReuse(report, s.cfg()) {
+					steps = append(steps, config.ReuseStep)
+				}
+				steps = append(steps, "Only configure credentials if the host retry also reports them missing.")
 				err := cerrors.New(cerrors.CategoryConfig, "DOCTOR_UNHEALTHY",
 					"one or more diagnostic checks failed").
-					WithNextSteps(
-						"Review the failing checks and their status/recovery_scope fields above.",
-						"When recovery_scope is host, retry `wecom-calendar-cli doctor` with access to the host user environment.",
-						"Only configure credentials if the host retry also reports them missing.")
+					WithNextSteps(steps...)
 				if reportNeedsHostRetry(report) {
 					err.WithRecovery(cerrors.Recovery{
 						Action: "retry_current_command", Scope: "host",
@@ -220,6 +226,22 @@ func diagnosticRecoveryScope(err error) string {
 		return recovery.Scope
 	}
 	return ""
+}
+
+// reportOffersReuse puts `auth reuse` ahead of configuring credentials when the
+// context lacks only an identity another stored context has. An unreadable
+// store is excluded: reuse reads the same store, and that failure is recovered
+// on the host.
+func reportOffersReuse(report doctorReport, cfg config.Config) bool {
+	if !cfg.MayReuse {
+		return false
+	}
+	for _, check := range report.Checks {
+		if check.Name == "credentials" {
+			return !check.OK && check.Status != "inaccessible"
+		}
+	}
+	return false
 }
 
 func reportNeedsHostRetry(report doctorReport) bool {

@@ -166,10 +166,30 @@ func PlanServiceContext(file File, name string, resolved *Resolved, overwrite, a
 	if result.CurrentContext != file.CurrentContext {
 		changes["current_context"] = FieldChange{Before: file.CurrentContext, After: result.CurrentContext}
 	}
-	quotedName := "'" + strings.ReplaceAll(name, "'", "'\"'\"'") + "'"
+	selected := constants.AppName + " --use-context " + QuoteContextArg(name)
+	steps := []string{selected + " auth guide", selected + " auth login"}
+	// A member who is already signed in on this service needs no password for
+	// the preset; offer that before the steps that lead to acquiring one.
+	if len(ReuseSources(result, name)) > 0 {
+		steps = append([]string{selected + reuseArgs}, steps...)
+	}
 	return ContextPlan{Context: name, Changed: !reflect.DeepEqual(file, result), CurrentContext: result.CurrentContext, Changes: changes,
-		NextSteps: []string{constants.AppName + " --use-context " + quotedName + " auth guide", constants.AppName + " --use-context " + quotedName + " auth login"}, File: result}, nil
+		NextSteps: steps, File: result}, nil
 }
+
+// QuoteContextArg quotes a context name for a POSIX shell, so a recovery step
+// that names it can be pasted as written.
+func QuoteContextArg(name string) string {
+	return "'" + strings.ReplaceAll(name, "'", "'\"'\"'") + "'"
+}
+
+// reuseArgs is the preview form every recovery step advertises: it verifies
+// and reports, and writes nothing.
+const reuseArgs = " auth reuse --dry-run"
+
+// ReuseStep is the recovery step that precedes acquiring a credential when
+// Config.MayReuse is set.
+const ReuseStep = constants.AppName + reuseArgs
 
 // AuthGuide is an offline acquisition guide, not a capability or authentication probe.
 type AuthGuide struct {
@@ -194,6 +214,8 @@ type AuthGuide struct {
 // Issuing a new password invalidates the previous one for every calendar
 // client, so the instructions also say when not to issue one: an inaccessible
 // credential store is recovered on the host, never by acquiring a credential.
+// For the same reason a context that `auth reuse` could complete (cfg.MayReuse)
+// is told so first, ahead of every step that leads to a password.
 func Guide(cfg Config, sources map[string]string) (AuthGuide, error) {
 	if err := ValidateService(cfg); err != nil {
 		return AuthGuide{}, err
@@ -207,6 +229,12 @@ func Guide(cfg Config, sources map[string]string) (AuthGuide, error) {
 		"The password is issued in the WeCom mobile app; there is no web page for it. Open Workbench, then Calendar, then the calendar settings, then \"Sync to other calendars\".",
 		"Issuing a new CalDAV password invalidates the previous one, and every calendar client still using the old password stops syncing. Reuse the current password if you have it; issue a new one only when you have none or the server rejected the stored one (HTTP 401).",
 		"If the stored password merely cannot be read here (CREDENTIAL_STORE_INACCESSIBLE, or any error whose recovery.scope is host), do not issue a new one. Retry the command with access to the user's home directory and OS keychain.",
+	}
+	if cfg.MayReuse {
+		g.Instructions = append([]string{
+			"Another context on this server already has a WeCom email, and contexts on one server share one stored CalDAV password. Before you enter or issue a password, run `auth reuse --dry-run` in this context and, when it reports `available`, `auth reuse`: it verifies that stored login and records its email here. No password is asked for and none is copied.",
+		}, g.Instructions...)
+		g.NextSteps = append([]string{ReuseStep}, g.NextSteps...)
 	}
 	if cfg.Auth.CredentialURL != "" {
 		g.CredentialURL = cfg.Auth.CredentialURL

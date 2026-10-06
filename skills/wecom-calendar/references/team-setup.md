@@ -16,7 +16,11 @@ to the keychain:
 wecom-calendar-cli config set-context team \
   --credential-url https://wiki.example.com/wecom-caldav --activate
 
-# The member completes personal authentication in a terminal.
+# A member who is already signed in on that server needs no password.
+wecom-calendar-cli --use-context team auth reuse --dry-run
+wecom-calendar-cli --use-context team auth reuse
+
+# Otherwise the member completes personal authentication in a terminal.
 wecom-calendar-cli --use-context team auth guide
 wecom-calendar-cli --use-context team auth login
 ```
@@ -60,6 +64,13 @@ The result names the context, what changed and what to run next:
   ]
 }
 ```
+
+When another context on the same server already has a WeCom email,
+`next_steps` starts with a third entry,
+`wecom-calendar-cli --use-context 'team' auth reuse --dry-run`: the member is
+signed in there, and [reuse](#reuse-an-existing-login--auth-reuse) completes
+the preset without a password. `config set-context` reads only the config file
+to decide that.
 
 `config set-context <name>` resolves **flags > environment > `.env` > the named
 target context > defaults**. It ignores personal environment fields and secrets
@@ -144,22 +155,138 @@ never requests it. Do not fetch it with credentials, do not send the password
 to it, and do not invent a URL when the field is empty — give the user the
 `instructions` instead.
 
+When the selected context has no WeCom email and another context on the same
+server has one, the guide leads with reuse: `instructions` starts with a line
+that says so, and `next_steps` puts it ahead of `auth login`. Follow that order.
+
+```bash
+wecom-calendar-cli --use-context team auth guide --fields next_steps
+# {
+#   "next_steps": [
+#     "wecom-calendar-cli --use-context 'team' auth reuse --dry-run",
+#     "wecom-calendar-cli --use-context 'team' auth login"
+#   ]
+# }
+```
+
 ## A new password invalidates the previous one
 
 Issuing a new CalDAV password in the WeCom app invalidates the one before it.
 Every calendar client still using the old password — a phone, a desktop
 calendar, this CLI on another machine — stops syncing until it is updated. So
-a new password is the answer to only two situations, and never to the third:
+a new password is the answer to only two situations, and never to the other
+two:
 
 | Situation | How it shows | What to do |
 |-----------|--------------|------------|
-| No credential exists | `CREDENTIAL_NOT_VISIBLE_OR_MISSING` on the host too, or `auth status` reports `"configured": false` there | The user runs `auth login`. They reuse the current password if they have it, and issue one only if they do not. |
+| The credential store cannot be read | `CREDENTIAL_STORE_INACCESSIBLE`, or any error with `recovery.scope=host` | Retry the same command with access to the user's home directory and OS keychain. **Do not** issue a password, run `auth login`, `auth reuse` or `config init`. |
+| Only the WeCom email is missing | `AUTH_NO_BASIC` on a context beside one that is signed in on the same server; `next_steps` starts with `auth reuse --dry-run` | Run `auth reuse --dry-run`, then `auth reuse`. **Do not** issue a password or run `auth login`. |
+| No credential exists | `CREDENTIAL_NOT_VISIBLE_OR_MISSING` on the host too, or `auth status` reports `"configured": false` there, and `auth reuse` has nothing to offer | The user runs `auth login`. They reuse the current password if they have it, and issue one only if they do not. |
 | The stored password was rejected | `CALDAV_AUTH` (auth, exit 4, HTTP 401) | The user issues a new password, runs `auth login`, and updates their other calendar clients. |
-| The credential store cannot be read | `CREDENTIAL_STORE_INACCESSIBLE`, or any error with `recovery.scope=host` | Retry the same command with access to the user's home directory and OS keychain. **Do not** issue a password, run `auth login` or `config init`. |
 
-A sandbox that cannot see the keychain produces the third situation, and the
-first two look similar from inside it. Retry on the host before concluding that
+A sandbox that cannot see the keychain produces the first situation, and the
+last two look similar from inside it. Retry on the host before concluding that
 a credential is missing.
+
+## Reuse an existing login — `auth reuse`
+
+A team preset usually sits beside a personal context on the same server. The
+stored password is keyed by the server's host and the scheme, so the two
+contexts **already share it**. The preset lacks only the WeCom email, and
+every command there fails with `AUTH_NO_BASIC`. `auth reuse` records the email
+without anyone entering a password:
+
+```bash
+wecom-calendar-cli --use-context team auth reuse --dry-run   # verify and preview
+wecom-calendar-cli --use-context team auth reuse             # record the email
+wecom-calendar-cli --use-context team auth status            # the separate check
+```
+
+It considers every other context with the same complete server URL and scheme
+that has an email, before it reads any credential. For each it verifies the
+stored password with that email — the authenticated calendar-home request
+`auth login` and `doctor` send — and records the one that verifies on the
+selected context. `--dry-run` runs the same verification and writes nothing:
+
+```json
+{
+  "changed": true,
+  "context": "team",
+  "dry_run": true,
+  "source_context": "personal",
+  "state": "available",
+  "verified": true
+}
+```
+
+| `state` | Meaning | `changed` | `verified` |
+|---------|---------|-----------|------------|
+| `available` | `--dry-run` verified a source; without `--dry-run` its email is recorded | `true` | `true` |
+| `reused` | the email was recorded on the selected context | `true` | `true` |
+| `unchanged` | the selected context already has an email; nothing was read | `false` | `false` |
+| `unavailable` | no other context on this server has an email the stored password authenticates | `false` | `false` |
+
+`source_context` names the context the email comes from and appears only when
+one was selected. `reason` explains `unchanged` and `unavailable`:
+
+```json
+{
+  "changed": false,
+  "context": "plain",
+  "dry_run": true,
+  "reason": "no matching stored identity can be reused",
+  "state": "unavailable",
+  "verified": false
+}
+```
+
+Both are ordinary results with exit 0, and neither is evidence that the
+context can authenticate — keep the `auth status` check. After `unavailable`,
+continue with `auth guide` and `auth login`.
+
+What reuse does not do:
+
+- It copies, moves and re-saves no password. There is still one stored
+  password per server.
+- It never replaces an email a context already has, and it changes no other
+  context and not the current context.
+- It reads nothing from `WECOM_CALENDAR_USERNAME` or `WECOM_CALENDAR_PASSWORD`.
+- It does not switch the scheme. It may adopt the source's spelling of the
+  server URL, when the two spellings are stored under different keys.
+
+A source whose email the server rejects (HTTP 401) is skipped, not reported.
+One stored password belongs to one WeCom account, so with two personal
+contexts on a server only one of them verifies, and reuse picks that one.
+
+The preview is read-only. Applying it changes one field of the user's config,
+the selected context's email, so apply it when the task needs that context to
+authenticate, and say that you did.
+
+Failures leave the config as it was, and none of them calls for a password:
+
+- **`AUTH_REUSE_AMBIGUOUS`** (conflict, 11) — more than one email verified.
+  `details.contexts` names the candidates. List them with
+  `config get-contexts`, ask the user which account the context should use
+  when it is not evident, and repeat with `--from-context <name>`.
+- **`AUTH_REUSE_SOURCE_NOT_FOUND`** (not_found, 6) /
+  **`AUTH_REUSE_SOURCE_MISMATCH`** (conflict, 11) — `--from-context` names a
+  context that does not exist, or one on another server or scheme. Pick a name
+  from `config get-contexts`.
+- **`AUTH_REUSE_TARGET_MISSING`** (config, 3) — the selected context is not in
+  the config file. Create it with `config set-context <name>` and select it
+  with `--use-context`.
+- **`AUTH_REUSE_TARGET_MISMATCH`** (conflict, 11) — `--base-url`,
+  `--auth-scheme` or their environment variables select another service than
+  the context stores. Drop the override.
+- **`AUTH_REUSE_CONFIG_CHANGED`** / **`AUTH_REUSE_CREDENTIAL_CHANGED`**
+  (conflict, 11) — the config file or the stored password changed while the
+  login was being verified. Nothing was saved; preview again.
+- **`AUTH_REUSE_WRITE_FAILED`** (config, 3) — the login verified, but the
+  config file could not be written. Fix access to the config directory and run
+  `auth reuse` again.
+- Network, permission and credential-store failures keep their own errors.
+  `CREDENTIAL_STORE_INACCESSIBLE` and `CREDENTIAL_NOT_VISIBLE_OR_MISSING` are a
+  host retry here as everywhere; do not move on to `auth login`.
 
 ## Personal login — `auth login`
 
