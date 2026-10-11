@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/angelmsger/wecom-calendar-cli/internal/output"
-	"github.com/angelmsger/wecom-calendar-cli/internal/update"
+	"github.com/angelmsger/agent-cli-kit/output"
+	"github.com/angelmsger/agent-cli-kit/update"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	"github.com/spf13/cobra"
 )
 
 // notifyTimeout bounds the release lookup performed on a cache miss so a
 // routine command is never stalled by a slow or offline network. The result
-// is cached for 24h (see update.Cached), so at most one command per day pays
-// this cost.
+// is cached for 24h (see update.Checker.Cached), so at most one command per day
+// pays this cost.
 const notifyTimeout = 800 * time.Millisecond
 
 // noUpdateNotifierEnv silences the in-response update notice when set to a
@@ -27,6 +27,12 @@ const noUpdateNotifierEnv = "WECOM_CALENDAR_CLI_NO_UPDATE_NOTIFIER"
 // upgrade. There is no `wecom-calendar-cli update` subcommand, so it points at
 // the npm package the binary is distributed through.
 const updateCommandHint = "npm install -g @angelmsger/wecom-calendar-cli@latest"
+
+// releaseChecker looks up wecom-calendar-cli's latest GitHub release.
+// WECOM_CALENDAR_RELEASE_API overrides the endpoint so tests can point it at a
+// local server. The repository is spelled in lower case, as the release URLs
+// always have been.
+var releaseChecker = update.Checker{Repo: "angelmsger/wecom-calendar-cli", EndpointEnv: "WECOM_CALENDAR_RELEASE_API"}
 
 // updateNoticeSkip lists the top-level command groups that must not emit the
 // update notice: doctor reports updates itself; the rest are setup/meta
@@ -60,7 +66,7 @@ func maybeNotifyUpdate(s *appState, cmd *cobra.Command) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), notifyTimeout)
 	defer cancel()
-	st := update.Cached(ctx, &http.Client{Timeout: notifyTimeout}, s.cfgDir, constants.Version)
+	st := releaseChecker.Cached(ctx, &http.Client{Timeout: notifyTimeout}, s.cfgDir, constants.Version)
 	if !st.Available {
 		return
 	}

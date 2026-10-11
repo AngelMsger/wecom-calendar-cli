@@ -20,17 +20,24 @@ SQLite store and queries them. The entrypoint is `cmd/wecom-calendar-cli/`;
 `cmd → internal → pkg` (pkg never imports internal):
 
 - `pkg/` — the importable, stateless client layer: `caldav` (the purpose-built
-  CalDAV client for the non-standard Tencent Exmail backend), `transport` (HTTP
-  retry, same-origin redirect guard, decorators), `errors` (structured error
-  model + exit codes), `timeutil` (the `--since`/`--from`/`--to` window parser),
-  `constants`.
+  CalDAV client for the non-standard Tencent Exmail backend), `transport` (the
+  shared HTTP client with wecom-calendar-cli's User-Agent, same-origin redirect
+  guard and CalDAV read retries), `errors` (the shared structured error model
+  and exit codes, plus wecom-calendar-cli's hints), `timeutil` (the
+  `--since`/`--from`/`--to` window parser), `constants`.
 - `internal/app` — the Cobra command tree, one noun per file.
-- `internal/{config,auth,output,update,cliflags}` — setup, credentials,
-  presentation, and agent-facing plumbing, mirrored from the sibling CLIs.
+- `internal/{config,auth}` — setup and the credential model, mirrored from the
+  sibling CLIs; secrets live in the shared credential store.
 - `internal/{store,sync,ical,expand}` — the **local-store layer**, this
   project's one documented divergence from the stateless siblings: SQLite
   persistence, the CalDAV→store sync orchestrator, iCalendar parsing (including
   embedded-VTIMEZONE / non-IANA TZID resolution), and recurrence expansion.
+
+Output rendering, argv normalization, the release check, the credential store,
+and the code behind `pkg/errors` and `pkg/transport` come from
+[agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), which every CLI in
+the family shares. A fix to one of those belongs there; this repo then bumps the
+version in `go.mod`.
 
 Tests sit beside the code as `*_test.go`. `test/seedstore/` is a helper the
 end-to-end script runs to fill a scratch store. The companion agent Skill is in

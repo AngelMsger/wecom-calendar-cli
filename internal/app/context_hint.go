@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/angelmsger/agent-cli-kit/output"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
-	"github.com/angelmsger/wecom-calendar-cli/internal/output"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	"github.com/spf13/cobra"
 )

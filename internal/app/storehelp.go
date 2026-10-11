@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/angelmsger/agent-cli-kit/output"
 	expandpkg "github.com/angelmsger/wecom-calendar-cli/internal/expand"
-	"github.com/angelmsger/wecom-calendar-cli/internal/output"
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"

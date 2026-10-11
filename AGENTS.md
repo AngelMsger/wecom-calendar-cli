@@ -48,9 +48,17 @@ Consequences and rules:
 
 - Standard family layers still apply:
   `pkg/{constants,errors,transport,caldav,timeutil}` and
-  `internal/{app,output,config,auth,update}` mirror jira-cli. `pkg/caldav` is
-  this project's `apiclient` analog; `pkg/timeutil` is the window parser
-  `prometheus-cli` carries under the same name.
+  `internal/{app,config,auth}` mirror jira-cli. `pkg/caldav` is this project's
+  `apiclient` analog; `pkg/timeutil` is the window parser `prometheus-cli`
+  carries under the same name.
+- Output rendering, argv correction, the update check and the credential store
+  come from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared
+  by every CLI in the family. Fix bugs in those there, not here. `pkg/errors`
+  re-exports the kit's `CLIError` model and exit-code map and installs this
+  CLI's hints (`hints.go`); `pkg/transport` re-exports the kit's retrying HTTP
+  client with this CLI's defaults: its User-Agent, the same-origin redirect
+  guard, and retries for the read-only CalDAV verbs `PROPFIND` and `REPORT`
+  alongside `GET` and `HEAD`.
 - The extra layer lives in `internal/{store,sync,ical,expand,meta}`. `sync` is
   the only writer to raw-fact/derived tables; `expand` (recurrence) is a pure
   rebuild from stored data.
@@ -228,10 +236,10 @@ parsing dates locally, and decide explicitly whether its window can be paged.
 
 ### NDJSON continuation
 
-Ported from `bitbucket-cli` unchanged: `internal/output/output.go` is identical
-to the sibling's apart from the import path. With `--format ndjson`, stdout
-carries item records only; after every row is written, a page with `has_more`
-prints one compact stderr line,
+The renderer is agent-cli-kit's `output` package, which `bitbucket-cli` and
+the other siblings share. With `--format ndjson`, stdout carries item records
+only; after every row is written, a page with `has_more` prints one compact
+stderr line,
 `{"_notice":{"pagination":{"next":…,"has_more":true},"next_steps":[…]}}`.
 `Options.NoticeWriter` makes the destination injectable and `Options.NextFlag`
 names the continuation flag, defaulting to `--cursor`, which the table footer
@@ -244,9 +252,9 @@ and pass an empty descriptor on purpose: there is no cursor to preserve, and
 none is fabricated. A command that starts paginating must pass its `pageInfo`
 through, or the notice is lost before the renderer sees it.
 
-Covered by `internal/output/pagination_test.go` (projection, an empty page
-with a token, completed and unpaginated results, write failures, a custom
-flag) and by `TestEventListNDJSONContinuation`, which reads the notice and
+Covered by agent-cli-kit's `output` tests (projection, an empty page with a
+token, completed and unpaginated results, write failures, a custom flag) and
+by `TestEventListNDJSONContinuation`, which reads the notice and
 resumes through the real command. `scripts/e2e.sh` does the same against the
 binary. No command creates events offline, so it seeds synthetic occurrences
 with `test/seedstore` — `event list` reads only the derived `event_instances`

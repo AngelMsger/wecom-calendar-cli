@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/angelmsger/wecom-calendar-cli/internal/output"
+	"github.com/angelmsger/agent-cli-kit/output"
 	syncpkg "github.com/angelmsger/wecom-calendar-cli/internal/sync"
 )
 
