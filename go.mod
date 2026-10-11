@@ -3,16 +3,14 @@ module github.com/angelmsger/wecom-calendar-cli
 go 1.25.0
 
 require (
-	github.com/angelmsger/agent-cli-kit v0.1.1-0.20261011142931-0e9336ab0f86
+	github.com/angelmsger/agent-cli-kit v0.1.1-0.20261011160734-74bd4277b3c7
 	github.com/charmbracelet/huh v1.0.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
-	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.9
 	github.com/teambition/rrule-go v1.8.2
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/term v0.43.0
-	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.54.0
 )
 
@@ -34,6 +32,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
@@ -50,6 +49,7 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.74.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
