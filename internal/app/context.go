@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/angelmsger/agent-cli-kit/output"
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
-	"github.com/angelmsger/wecom-calendar-cli/internal/output"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/caldav"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 )

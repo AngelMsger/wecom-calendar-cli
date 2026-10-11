@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/angelmsger/agent-cli-kit/credstore"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
+	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/zalando/go-keyring"
 )
@@ -36,6 +38,12 @@ func (f fakeKeyring) Set(_, account, secret string) error {
 }
 
 func (f fakeKeyring) Delete(string, string) error { return f.err }
+
+// newStoreWithKeyring returns wecom-calendar-cli's Store over a substitute
+// keychain backend. The store's own behavior is tested in agent-cli-kit/credstore.
+func newStoreWithKeyring(dir string, backend credstore.Backend) *Store {
+	return credstore.NewStoreWithBackend(dir, constants.KeychainService, backend)
+}
 
 func resolveConfig() config.Config {
 	return config.Config{BaseURL: "https://service.example.test/deploy", Auth: config.AuthConfig{Scheme: SchemeBasic, Username: "member@example.test", CredentialURL: "https://help.example.test/caldav"}}

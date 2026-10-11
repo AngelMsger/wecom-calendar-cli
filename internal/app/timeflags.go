@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/angelmsger/wecom-calendar-cli/internal/output"
+	"github.com/angelmsger/agent-cli-kit/output"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/timeutil"
