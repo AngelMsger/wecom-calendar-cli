@@ -1,12 +1,12 @@
-// Package auth models WeCom CalDAV credentials, resolves them from
-// configuration or secure storage, and applies them to outgoing HTTP requests.
+// Package auth declares wecom-calendar-cli's auth scheme and resolves WeCom
+// CalDAV credentials from configuration or secure storage. The credential
+// model, header encoding and recovery errors come from agent-cli-kit/auth;
+// this package registers WeCom Calendar's scheme and wording with it.
 package auth
 
 import (
-	"net/url"
-	"strings"
-
-	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
+	kit "github.com/angelmsger/agent-cli-kit/auth"
+	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 )
 
 // Scheme identifies an authentication scheme. WeCom CalDAV only speaks HTTP
@@ -16,50 +16,31 @@ const (
 	SchemeBasic = "basic"
 )
 
-// Credential is a fully resolved credential ready to authenticate requests.
-type Credential struct {
-	Scheme   string
-	Username string // the WeCom email
-	Secret   string // the app-specific CalDAV password
+func init() {
+	kit.Register(&kit.Product{
+		Schemes: []kit.Scheme{
+			{Name: SchemeBasic, Kind: kit.Basic,
+				Missing: "basic auth requires both a username and an app-specific password"},
+		},
+		DefaultScheme:    SchemeBasic,
+		Name:             "WeCom Calendar",
+		Doctor:           constants.AppName + " doctor",
+		MissingStep:      missingStep,
+		InaccessibleStep: "Do not run `config init` or `auth login`, and do not issue a new CalDAV password, unless the same check also fails in the host environment.",
+		MismatchHint:     "The service URL in effect is not the one the stored credential belongs to. Select the context for the intended service; this is not a password problem.",
+		MismatchSteps:    []string{constants.AppName + " config get-contexts", constants.AppName + " config show --explain"},
+	})
 }
 
-// Validate reports whether the credential is internally consistent.
-func (c Credential) Validate() error {
-	switch c.Scheme {
-	case SchemeBasic:
-		if c.Username == "" || c.Secret == "" {
-			return cerrors.New(cerrors.CategoryConfig, "AUTH_NO_BASIC",
-				"basic auth requires both a username and an app-specific password")
-		}
-	default:
-		return cerrors.Newf(cerrors.CategoryConfig, "AUTH_BAD_SCHEME",
-			"unknown auth scheme %q", c.Scheme)
-	}
-	return nil
-}
+// missingStep is the last step when no stored password is visible. Resolve
+// puts `auth reuse` ahead of it when another context could be reused.
+const missingStep = "Only if the host retry also reports missing credentials, run `" + constants.AppName + " auth login` (or `config init`) in the user's terminal, or set WECOM_CALENDAR_* environment variables. Do not issue a new CalDAV password before then: it invalidates the previous one."
 
-// Redacted returns a copy safe for logging: the secret is masked.
-func (c Credential) Redacted() Credential {
-	c.Secret = maskSecret(c.Secret)
-	return c
-}
-
-func maskSecret(s string) string {
-	if s == "" {
-		return ""
-	}
-	if len(s) <= 4 {
-		return "****"
-	}
-	return strings.Repeat("*", len(s)-4) + s[len(s)-4:]
-}
+// Credential is a fully resolved credential ready to authenticate requests:
+// the WeCom email as Username and the app-specific CalDAV password as Secret.
+// Its Validate, Header, Decorator and Redacted methods follow the scheme
+// registered above.
+type Credential = kit.Credential
 
 // AccountKey derives the keychain account identifier for a base URL and scheme.
-// It is stable across runs so credentials can be located later.
-func AccountKey(baseURL, scheme string) string {
-	host := baseURL
-	if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
-		host = u.Host
-	}
-	return host + ":" + scheme
-}
+func AccountKey(baseURL, scheme string) string { return kit.AccountKey(baseURL, scheme) }

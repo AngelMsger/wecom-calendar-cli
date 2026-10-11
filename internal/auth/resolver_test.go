@@ -217,3 +217,23 @@ func TestStoredCredentialResolves(t *testing.T) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }
+
+// The supplied password belongs to whichever scheme is configured, so an
+// unknown scheme is reported as such instead of sending the caller to a store
+// lookup, and the messages name no other scheme: there is only one.
+func TestSchemeErrorsKeepTheirWording(t *testing.T) {
+	store := newStoreWithKeyring(t.TempDir(), fakeKeyring{secrets: map[string]string{}})
+	cfg := resolveConfig()
+	cfg.Auth.Scheme = "pat"
+	_, err := Resolve(cfg, config.Secrets{Password: "transient"}, store)
+	if ce := cerrors.AsCLIError(err); ce == nil || ce.Code != "AUTH_BAD_SCHEME" || ce.Message != `unknown auth scheme "pat"` {
+		t.Fatalf("unexpected error: %+v", ce)
+	}
+	cfg = resolveConfig()
+	cfg.Auth.Scheme = ""
+	cfg.Auth.Username = ""
+	_, err = Resolve(cfg, config.Secrets{Password: "transient"}, store)
+	if ce := cerrors.AsCLIError(err); ce == nil || ce.Code != "AUTH_NO_BASIC" || ce.Message != "basic auth requires both a username and an app-specific password" {
+		t.Fatalf("the default scheme lost its wording: %+v", ce)
+	}
+}

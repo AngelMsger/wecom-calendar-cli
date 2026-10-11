@@ -51,14 +51,16 @@ Consequences and rules:
   `internal/{app,config,auth}` mirror jira-cli. `pkg/caldav` is this project's
   `apiclient` analog; `pkg/timeutil` is the window parser `prometheus-cli`
   carries under the same name.
-- Output rendering, argv correction, the update check and the credential store
-  come from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared
+- Output rendering, argv correction, the update check, the credential store and
+  credential resolution come from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared
   by every CLI in the family. Fix bugs in those there, not here. `pkg/errors`
   re-exports the kit's `CLIError` model and exit-code map and installs this
   CLI's hints (`hints.go`); `pkg/transport` re-exports the kit's retrying HTTP
   client with this CLI's defaults: its User-Agent, the same-origin redirect
   guard, and retries for the read-only CalDAV verbs `PROPFIND` and `REPORT`
-  alongside `GET` and `HEAD`.
+  alongside `GET` and `HEAD`. `internal/auth` declares this CLI's one auth
+  scheme and its recovery wording, maps config onto the kit's resolver, and
+  adds the `auth reuse` step when another context could be reused.
 - The extra layer lives in `internal/{store,sync,ical,expand,meta}`. `sync` is
   the only writer to raw-fact/derived tables; `expand` (recurrence) is a pure
   rebuild from stored data.
