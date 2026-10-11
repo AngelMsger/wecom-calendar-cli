@@ -6,6 +6,7 @@ package auth
 
 import (
 	kit "github.com/angelmsger/agent-cli-kit/auth"
+	"github.com/angelmsger/wecom-calendar-cli/internal/config"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 )
 
@@ -28,7 +29,7 @@ func init() {
 		MissingStep:      missingStep,
 		InaccessibleStep: "Do not run `config init` or `auth login`, and do not issue a new CalDAV password, unless the same check also fails in the host environment.",
 		MismatchHint:     "The service URL in effect is not the one the stored credential belongs to. Select the context for the intended service; this is not a password problem.",
-		MismatchSteps:    []string{constants.AppName + " config get-contexts", constants.AppName + " config show --explain"},
+		MismatchSteps:    []string{config.ListContextsStep(), constants.AppName + " config show --explain"},
 	})
 }
 

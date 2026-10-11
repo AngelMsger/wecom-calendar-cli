@@ -206,12 +206,6 @@ func newConfigGetContextsCmd(s *appState) *cobra.Command {
 	}
 }
 
-// unknownContextHintFor wraps the config-package hint helper for use by
-// app-level commands.
-func unknownContextHintFor(file config.File, name string) string {
-	return config.UnknownContextHint(name, file.ContextNames())
-}
-
 func newConfigUseContextCmd(s *appState) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "use-context <name>",
@@ -220,23 +214,19 @@ func newConfigUseContextCmd(s *appState) *cobra.Command {
 		Example: "  wecom-calendar-cli config use-context personal",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
 			file, err := readConfigFile(s)
 			if err != nil {
 				return err
 			}
-			target, ok := file.Context(name)
-			if !ok {
-				return cerrors.Newf(cerrors.CategoryConfig, "UNKNOWN_CONTEXT",
-					"context %q is not defined", name).
-					WithHint(unknownContextHintFor(file, name))
+			name, err := config.UseContext(&file, args[0])
+			if err != nil {
+				return err
 			}
-			file.CurrentContext = target.Name
 			if err := config.WriteFile(s.cfgDir, file); err != nil {
 				return cerrors.Wrap(err, cerrors.CategoryConfig, "CONFIG_WRITE",
 					"failed to write the config file")
 			}
-			return s.emit(map[string]any{"context": target.Name, "status": "current"})
+			return s.emit(map[string]any{"context": name, "status": "current"})
 		},
 	}
 	cmd.ValidArgsFunction = completeContextNames(s)
@@ -253,30 +243,15 @@ func newConfigDeleteContextCmd(s *appState) *cobra.Command {
 		Example: "  wecom-calendar-cli config delete-context personal",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
 			file, err := readConfigFile(s)
 			if err != nil {
 				return err
 			}
-			target, ok := file.Context(name)
-			if !ok {
-				return cerrors.Newf(cerrors.CategoryConfig, "UNKNOWN_CONTEXT",
-					"context %q is not defined", name).
-					WithHint(unknownContextHintFor(file, name))
-			}
-			if len(file.Contexts) == 1 {
-				return cerrors.New(cerrors.CategoryUsage, "LAST_CONTEXT",
-					"cannot delete the only context")
-			}
-			kept := file.Contexts[:0]
-			for _, c := range file.Contexts {
-				if c.Name != target.Name {
-					kept = append(kept, c)
-				}
-			}
-			file.Contexts = kept
-			if file.CurrentContext == target.Name {
-				file.CurrentContext = file.Contexts[0].Name
+			// The first remaining context becomes current when the deleted
+			// one was; the only context cannot be deleted (LAST_CONTEXT).
+			target, err := config.DeleteContext(&file, args[0])
+			if err != nil {
+				return err
 			}
 			if err := config.WriteFile(s.cfgDir, file); err != nil {
 				return cerrors.Wrap(err, cerrors.CategoryConfig, "CONFIG_WRITE",

@@ -26,8 +26,8 @@ SQLite store and queries them. The entrypoint is `cmd/wecom-calendar-cli/`;
   and exit codes, plus wecom-calendar-cli's hints), `timeutil` (the
   `--since`/`--from`/`--to` window parser), `constants`.
 - `internal/app` — the Cobra command tree, one noun per file.
-- `internal/config` — setup, layered configuration and named contexts,
-  mirrored from the sibling CLIs.
+- `internal/config` — wecom-calendar-cli's settings and file shape on the
+  shared configuration engine, plus setup, login reuse and the wizards.
 - `internal/auth` — wecom-calendar-cli's auth scheme and recovery wording on
   top of the shared resolver; secrets live in the shared credential store.
 - `internal/{store,sync,ical,expand}` — the **local-store layer**, this
@@ -36,7 +36,8 @@ SQLite store and queries them. The entrypoint is `cmd/wecom-calendar-cli/`;
   embedded-VTIMEZONE / non-IANA TZID resolution), and recurrence expansion.
 
 Output rendering, argv normalization, the release check, the credential store,
-credential resolution, and the code behind `pkg/errors` and `pkg/transport` come from
+credential resolution, the configuration engine, and the code behind `pkg/errors`
+and `pkg/transport` come from
 [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), which every CLI in
 the family shares. A fix to one of those belongs there; this repo then bumps the
 version in `go.mod`.

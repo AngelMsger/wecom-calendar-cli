@@ -51,8 +51,8 @@ Consequences and rules:
   `internal/{app,config,auth}` mirror jira-cli. `pkg/caldav` is this project's
   `apiclient` analog; `pkg/timeutil` is the window parser `prometheus-cli`
   carries under the same name.
-- Output rendering, argv correction, the update check, the credential store and
-  credential resolution come from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared
+- Output rendering, argv correction, the update check, the credential store,
+  credential resolution and the configuration engine come from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared
   by every CLI in the family. Fix bugs in those there, not here. `pkg/errors`
   re-exports the kit's `CLIError` model and exit-code map and installs this
   CLI's hints (`hints.go`); `pkg/transport` re-exports the kit's retrying HTTP
@@ -61,6 +61,10 @@ Consequences and rules:
   alongside `GET` and `HEAD`. `internal/auth` declares this CLI's one auth
   scheme and its recovery wording, maps config onto the kit's resolver, and
   adds the `auth reuse` step when another context could be reused.
+  `internal/config` registers this CLI's settings, file location and wording
+  with the kit's configuration engine (`schema.go`) and keeps the YAML shape of
+  `config.yaml`, the legacy flat form, the reuse match, the guide and the
+  wizards.
 - The extra layer lives in `internal/{store,sync,ical,expand,meta}`. `sync` is
   the only writer to raw-fact/derived tables; `expand` (recurrence) is a pure
   rebuild from stored data.
@@ -265,9 +269,10 @@ table — instead of starting a mock server.
 ### Team service presets and personal login
 
 Ported from `jira-cli` (`bebf7e0`) file by file, and cross-checked against
-`bitbucket-cli` (`fd3607f`). `internal/config/setup.go` owns offline
-service-field validation, the acquisition guide and the pure
-`PlanServiceContext` merge that execution and `--dry-run` share.
+`bitbucket-cli` (`fd3607f`). `internal/config/setup.go` owns the acquisition
+guide and wraps the shared offline service-field validation and the pure
+`PlanServiceContext` merge that execution and `--dry-run` share, adding the
+`auth reuse` step to the plan.
 `LoadOptions.Setup` selects the requested destination even when it is new,
 ignores runtime context selection, and drops personal environment fields before
 a password can imply the scheme. `AuthConfig.CredentialURL` is additive,
@@ -325,7 +330,8 @@ test:
 - **There is one auth scheme.** The plumbing is kept so the shape matches —
   `--auth-scheme`, `WECOM_CALENDAR_AUTH_SCHEME`, `auth.scheme`,
   `ValidateService` — and `basic` is the only value it accepts.
-  `resolveAuthDefaults` is the empty hook `prometheus-cli` also keeps; there is
+  No after-merge hook is registered: the default layer supplies the scheme, and
+  the schema's scheme hint carries the `AUTH_BAD_SCHEME` wording. There is
   no scheme prompt, no `AUTH_NO_TOKEN` and no `promptChoice`. Because the value
   cannot show whether a password implied the scheme, the exclusion test asserts
   on its source. `TestOnlyTheBasicSchemeIsAccepted`,
@@ -393,9 +399,11 @@ the command and `reuseAuthentication`, whose `reuseServices` keep resolution,
 verification and the config read and write independently testable.
 `internal/config/stored_context.go` holds `StoredContext`, which resolves a
 context from the file and the built-in defaults only, the service match
-`SameService`, the candidate list `ReuseSources`, and the two loader hooks.
-`auth.CredentialLookupURL` and `auth.ForgetForConfig` keep the stored lookup
-key under an equivalent URL override.
+`SameService`, the candidate list `ReuseSources`, and `mayReuse`, which the
+`Load` wrapper applies to the file it parsed to set `Config.MayReuse`. The
+stored spelling of the server comes from the kit's `Resolved.StoredServer`;
+`auth.CredentialLookupURL` and `auth.ForgetForConfig` use it to keep the stored
+lookup key under an equivalent URL override.
 
 **What reuse adds here.** The keychain account is `<host>:<scheme>`, so
 contexts on one server already share one stored password; that limitation is
@@ -427,7 +435,8 @@ concurrent config edits, credential rotation, a fresh-load resolution and each
 operational failure.
 
 Recovery steps must name commands that exist in this CLI. The context listing
-is `config get-contexts` here, not the `config contexts` some siblings use.
+is `config get-contexts` here, not the `config contexts` some siblings use;
+build it with `config.ListContextsStep()`, which the schema's wording defines.
 `assertRunnableStep` resolves a step against the command tree, flags and
 arguments included; run every advertised step of a new error through it.
 

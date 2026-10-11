@@ -1,27 +1,14 @@
 package config
 
-import "strings"
+import kit "github.com/angelmsger/agent-cli-kit/config"
 
-// NormalizeContextName is the canonical form used to store and look up context
-// names. Names are trimmed and lower-cased: kubectl-style conventions are
-// universally lowercase, and case-sensitive names create silent footguns —
-// `--use-context Work` against a file containing `work` should not be a
-// hard error. Lookups remain case-insensitive (see File.Context) so legacy
-// mixed-case configs keep working until they are next re-saved.
-func NormalizeContextName(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
-}
+// NormalizeContextName trims and lower-cases a context name about to be saved.
+// Never apply it to a name being looked up: File.Context already ignores case,
+// so legacy mixed-case contexts keep their spelling and keep resolving.
+func NormalizeContextName(s string) string { return kit.NormalizeContextName(s) }
 
 // NormalizeUsername lowercases an *email* username and otherwise preserves the
-// caller's casing. WeCom CalDAV authenticates by email + app-specific password
-// and treats the address case-insensitively (every mail provider does in
-// practice). The `@` heuristic is good enough: emails always contain it.
-// Trimming runs in both branches because trailing whitespace in a copy-pasted
-// email is a surprisingly common mistake.
-func NormalizeUsername(s string) string {
-	s = strings.TrimSpace(s)
-	if strings.ContainsRune(s, '@') {
-		return strings.ToLower(s)
-	}
-	return s
-}
+// caller's casing, trimming either way. WeCom CalDAV authenticates by email +
+// app-specific password and treats the address case-insensitively, so this
+// CLI opts in where a username is saved and where identities are compared.
+func NormalizeUsername(s string) string { return kit.NormalizeUsername(s) }

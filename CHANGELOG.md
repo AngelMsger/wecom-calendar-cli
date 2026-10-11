@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Layered configuration, context selection, the config file write and
+  `config set-context` planning now come from agent-cli-kit's `config`
+  package. Commands, output, error codes, hints and the `config.yaml` format
+  are unchanged, legacy flat files included. One error gains a better recovery
+  step: `UNKNOWN_CONTEXT`, from `--use-context`, `WECOM_CALENDAR_CONTEXT`,
+  `current_context`, `config use-context` or `config delete-context`, now
+  lists `wecom-calendar-cli config get-contexts` in `next_steps` instead of the
+  generic `config init` and `config show --explain`.
 - Credential validation, header encoding, keychain lookup and the credential
   recovery errors now come from agent-cli-kit's `auth` package. Messages, error
   codes, the `auth reuse` recovery step and stored credentials are unchanged.
