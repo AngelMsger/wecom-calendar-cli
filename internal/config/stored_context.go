@@ -1,34 +1,16 @@
 package config
 
-import "strings"
+import (
+	"strings"
+
+	kit "github.com/angelmsger/agent-cli-kit/config"
+)
 
 // StoredContext resolves only persisted context data and built-in defaults.
 // Credential reuse must not inherit another context's environment or .env identity.
 func StoredContext(context NamedContext, defaults Defaults) Config {
-	values := defaultLayer()
-	sources := make(map[string]string, len(values))
-	for key := range values {
-		sources[key] = "default"
-	}
-	for key, value := range buildFileLayer(File{Contexts: []NamedContext{context}, Defaults: defaults}, context.Name) {
-		values[key] = value
-		sources[key] = "file"
-	}
-	resolveAuthDefaults(values, sources)
-	return configFromMap(values)
-}
-
-// Equivalent flag spellings must not orphan a credential kept under a legacy key.
-func preserveCredentialLookup(cfg Config, file File, context string) Config {
-	stored, ok := file.Context(context)
-	if !ok || stored.BaseURL == cfg.BaseURL {
-		return cfg
-	}
-	left, e1 := NormalizeServiceURL(stored.BaseURL)
-	right, e2 := NormalizeServiceURL(cfg.BaseURL)
-	if e1 == nil && e2 == nil && left == right {
-		cfg.CredentialBaseURL = stored.BaseURL
-	}
+	var cfg Config
+	kit.Decode(kit.StoredContext(context, defaults), &cfg)
 	return cfg
 }
 
@@ -68,9 +50,10 @@ func ReuseSources(file File, name string) []NamedContext {
 	return sources
 }
 
-// mayReuse decides Config.MayReuse for the context in effect. A WeCom email
-// supplied at runtime, or a service override that differs from the stored
-// context, means reuse would change nothing or be refused, so neither is offered.
+// mayReuse decides Config.MayReuse for the context in effect, from the file
+// Load parsed. A WeCom email supplied at runtime, or a service override that
+// differs from the stored context, means reuse would change nothing or be
+// refused, so neither is offered.
 func mayReuse(cfg Config, file File, context string) bool {
 	stored, ok := file.Context(context)
 	if !ok || cfg.Auth.Username != "" || !SameService(StoredContext(stored, file.Defaults), cfg) {

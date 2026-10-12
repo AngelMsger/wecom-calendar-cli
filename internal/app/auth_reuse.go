@@ -114,12 +114,12 @@ func reuseAuthentication(s *appState, from string, dryRun bool, services reuseSe
 		if !ok {
 			return result, cerrors.New(cerrors.CategoryNotFound, "AUTH_REUSE_SOURCE_NOT_FOUND", "the selected source context does not exist").
 				WithHint(config.UnknownContextHint(from, file.ContextNames()) + noPasswordHint).
-				WithNextSteps(constants.AppName + " config get-contexts")
+				WithNextSteps(config.ListContextsStep())
 		}
 		if !config.SameService(targetCfg, reuseContextConfig(source, file.Defaults)) {
 			return result, cerrors.New(cerrors.CategoryConflict, "AUTH_REUSE_SOURCE_MISMATCH", "the source context belongs to a different service or authentication scope").
 				WithHint("A login is reused only between contexts with the same complete server URL and scheme. Choose a source on the destination's server." + noPasswordHint).
-				WithNextSteps(constants.AppName + " config get-contexts")
+				WithNextSteps(config.ListContextsStep())
 		}
 	}
 	// A populated destination belongs to the user. Reuse fills missing identity,
@@ -181,7 +181,7 @@ func reuseAuthentication(s *appState, from string, dryRun bool, services reuseSe
 		return result, cerrors.New(cerrors.CategoryConflict, "AUTH_REUSE_AMBIGUOUS", "multiple matching login identities are available; choose a source context").
 			WithDetails(map[string]any{"contexts": names}).
 			WithHint("More than one stored identity verified for this service. Name the context whose WeCom account the destination should use."+noPasswordHint).
-			WithNextSteps(constants.AppName+" config get-contexts", selected+" auth reuse --from-context <name> --dry-run")
+			WithNextSteps(config.ListContextsStep(), selected+" auth reuse --from-context <name> --dry-run")
 	}
 	chosen := matches[0]
 	updated := target

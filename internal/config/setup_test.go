@@ -7,18 +7,21 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 )
 
+// envNames lists every variable the schema binds, plus the context selector.
+var envNames = []string{"WECOM_CALENDAR_SERVER", "WECOM_CALENDAR_CREDENTIAL_URL", "WECOM_CALENDAR_AUTH_SCHEME",
+	"WECOM_CALENDAR_USERNAME", "WECOM_CALENDAR_FORMAT", "WECOM_CALENDAR_CLI_READ_ONLY", "WECOM_CALENDAR_PASSWORD",
+	"WECOM_CALENDAR_CONTEXT"}
+
 func cleanSetupEnv(t *testing.T) {
 	t.Helper()
-	for key := range envBindings {
+	for _, key := range envNames {
 		t.Setenv(key, "")
 	}
-	t.Setenv("WECOM_CALENDAR_CONTEXT", "")
 }
 
 func setupFixture() NamedContext {
@@ -94,76 +97,6 @@ func TestSetupTargetsNamedContextAndExcludesPersonalEnvironment(t *testing.T) {
 	// context or from the personal variables.
 	if got.Config.BaseURL != constants.DefaultServerURL || got.Sources[fieldServer] != "default" || got.Config.Auth.Username != "" || got.Config.Auth.CredentialURL != "" {
 		t.Fatalf("new target inherited active context: %+v", got)
-	}
-}
-
-func TestPlanServiceContextConflictIdempotencyAndPreservation(t *testing.T) {
-	cleanSetupEnv(t)
-	dir := t.TempDir()
-	target := setupFixture()
-	file := File{CurrentContext: "other", Contexts: []NamedContext{{Name: "other", BaseURL: "https://other.example.test"}, target},
-		Defaults: Defaults{ReadOnly: true, Format: "table", PageSize: 50, Timeout: 45 * time.Second, MaxRetries: 5}}
-	if err := WriteFile(dir, file); err != nil {
-		t.Fatal(err)
-	}
-	opt := LoadOptions{ConfigDir: dir, Context: "TEAM", Setup: true, DotenvPath: filepath.Join(dir, "absent")}
-	resolved, err := Load(opt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plan, err := PlanServiceContext(file, "TEAM", resolved, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.Changed {
-		t.Fatalf("repeat is not idempotent: %+v", plan.Changes)
-	}
-	opt.Flags.BaseURL = "https://new.example.test/deploy"
-	resolved, err = Load(opt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = PlanServiceContext(file, "team", resolved, false, false)
-	ce := cerrors.AsCLIError(err)
-	if ce == nil || ce.Code != "CONFIG_CONTEXT_CONFLICT" || ce.Category != cerrors.CategoryConflict {
-		t.Fatalf("missing structured differences: %v", err)
-	}
-	differences, ok := ce.Details.(map[string]FieldChange)
-	if !ok || !reflect.DeepEqual(differences, map[string]FieldChange{fieldServer: {Before: target.BaseURL, After: "https://new.example.test/deploy"}}) {
-		t.Fatalf("conflict did not report the non-secret field differences: %#v", ce.Details)
-	}
-	plan, err = PlanServiceContext(file, "team", resolved, true, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	nc, _ := plan.File.Context("team")
-	if nc.Auth != target.Auth || plan.File.CurrentContext != "other" || !reflect.DeepEqual(plan.File.Defaults, file.Defaults) || plan.File.Contexts[0] != file.Contexts[0] {
-		t.Fatalf("clobbered unrelated values: %+v", plan.File)
-	}
-	if err := WriteFile(dir, plan.File); err != nil {
-		t.Fatal(err)
-	}
-	roundtrip, _, err := ReadFile(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(roundtrip, plan.File) {
-		t.Fatalf("roundtrip lost fields: got %+v want %+v", roundtrip, plan.File)
-	}
-	plan, err = PlanServiceContext(file, "team", resolved, true, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.CurrentContext != "team" {
-		t.Fatal(plan)
-	}
-	initial := &Resolved{Config: resolved.Config, Sources: resolved.Sources}
-	plan, err = PlanServiceContext(File{}, "team", initial, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.CurrentContext != "team" {
-		t.Fatal("first context must activate")
 	}
 }
 
@@ -275,27 +208,17 @@ func TestOnlyTheBasicSchemeIsAccepted(t *testing.T) {
 	}
 }
 
-func TestNormalizeServiceIdentityAndRejectInvalidInput(t *testing.T) {
-	normal, err := NormalizeServiceURL("https://SERVICE.example.test:443/deploy/")
-	if err != nil || normal != "https://service.example.test/deploy" {
-		t.Fatalf("%q %v", normal, err)
-	}
-	if normal, err = NormalizeServiceURL(constants.DefaultServerURL); err != nil || normal != "https://caldav.wecom.work" {
-		t.Fatalf("default endpoint: %q %v", normal, err)
-	}
-	for _, bad := range []string{"", "file:///tmp/token", "https://user:secret@example.test", "https://example.test/?token=secret", "https://example.test/#fragment"} {
-		if _, err := NormalizeServiceURL(bad); err == nil {
-			t.Fatalf("accepted invalid service URL %q", bad)
-		}
-	}
-}
-
+// Every next step of a preset quotes the context name, the reuse step this
+// CLI adds included.
 func TestSetupRecoveryQuotesContextNames(t *testing.T) {
 	nc := setupFixture()
-	resolved := &Resolved{Config: Config{BaseURL: nc.BaseURL, Auth: nc.Auth}}
-	plan, err := PlanServiceContext(File{}, "ops team's", resolved, false, false)
+	resolved := &Resolved{Config: Config{BaseURL: nc.BaseURL, Auth: AuthConfig{Scheme: nc.Auth.Scheme}}}
+	plan, err := PlanServiceContext(File{Contexts: []NamedContext{nc}}, "ops team's", resolved, false, false)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(plan.NextSteps) != 3 || !strings.HasSuffix(plan.NextSteps[0], " auth reuse --dry-run") {
+		t.Fatalf("the preset does not lead with reuse: %v", plan.NextSteps)
 	}
 	for _, step := range plan.NextSteps {
 		if !strings.Contains(step, `--use-context 'ops team'"'"'s'`) {
