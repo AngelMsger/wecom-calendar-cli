@@ -1,6 +1,6 @@
 # Agent Guide — wecom-calendar-cli
 
-This project is a member of the `oa-cli` agent-facing CLI family and mirrors its
+This project is a member of the `agent-clis` agent-facing CLI family and mirrors its
 siblings (`jira-cli`, `confluence-cli`, …). Read the workspace guide
 (`../../AGENTS.md`) and the shared standards under `../../docs/` first. Port the
 established shape; do not reinvent cross-cutting contracts.
