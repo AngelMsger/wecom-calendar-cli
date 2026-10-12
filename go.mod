@@ -3,7 +3,7 @@ module github.com/angelmsger/wecom-calendar-cli
 go 1.25.0
 
 require (
-	github.com/angelmsger/agent-cli-kit v0.1.1-0.20261011160734-74bd4277b3c7
+	github.com/angelmsger/agent-cli-kit v0.3.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/spf13/cobra v1.10.2
