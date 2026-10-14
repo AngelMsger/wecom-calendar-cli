@@ -435,3 +435,44 @@ func TestTeamSetupThroughTheCommandTree(t *testing.T) {
 		t.Fatalf("setup, guide or the refused login touched the credential store: %v", entries)
 	}
 }
+
+func TestCredentialStoreFailuresPreservePartialOutcome(t *testing.T) {
+	for _, backend := range []string{"", "keychain"} {
+		t.Run("save_"+backend, func(t *testing.T) {
+			s, cfg, cred := loginStateForTest(t)
+			cause := errors.New("private diagnostic sentinel")
+			wrote := false
+			_, err := completeLogin(s, cfg, cred, loginServices{
+				Verify: func(config.Config, auth.Credential) error { return nil },
+				Save:   func(string, auth.Credential) (string, error) { return backend, cause },
+				Write:  func(string, config.File) error { wrote = true; return nil },
+			})
+			ce := cerrors.AsCLIError(err)
+			details, _ := ce.Details.(map[string]any)
+			if wrote || !errors.Is(err, cause) || ce.Code != "CREDENTIAL_SAVE_FAILED" || ce.Retryable || ce.Recovery == nil || ce.Recovery.Scope != "host" || details["credential_stored"] != (backend != "") || details["stored_in"] != backend {
+				t.Fatalf("lost save outcome: %+v", ce)
+			}
+			raw, _ := json.Marshal(ce.Payload())
+			if strings.Contains(string(raw), cause.Error()) {
+				t.Fatal("private cause leaked")
+			}
+		})
+	}
+	cause := errors.New("private logout sentinel")
+	err := credentialLogoutFailure(cause)
+	ce := cerrors.AsCLIError(err)
+	if !errors.Is(err, cause) || ce.Code != "LOGOUT_FAILED" || ce.Retryable || ce.Recovery == nil || ce.Recovery.Scope != "host" {
+		t.Fatalf("lost logout recovery: %+v", ce)
+	}
+	raw, _ := json.Marshal(ce.Payload())
+	if strings.Contains(string(raw), cause.Error()) {
+		t.Fatal("private cause leaked")
+	}
+}
+
+func TestLogoutPreservesServiceGuard(t *testing.T) {
+	cause := cerrors.New(cerrors.CategoryConfig, "CREDENTIAL_SERVICE_MISMATCH", "scope changed")
+	if credentialLogoutFailure(cause) != cause {
+		t.Fatal("replaced service guard with storage recovery")
+	}
+}
