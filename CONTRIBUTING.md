@@ -3,7 +3,8 @@
 Thanks for working on `wecom-calendar-cli`. This guide covers the repository
 layout, the build and test workflow, and the conventions a change is expected to
 follow. For the architecture and the workspace-wide conventions this project
-shares with its sibling CLIs, read [`AGENTS.md`](AGENTS.md) first.
+shares with its sibling CLIs, read [`AGENTS.md`](AGENTS.md) first; the design
+of each contract is in [`docs/technical-design.md`](docs/technical-design.md).
 
 This project complements Tencent's official
 [`wecom-cli`](https://github.com/WecomTeam/wecom-cli). Contributions that deepen
@@ -97,14 +98,14 @@ For a command that filters by time, resolve the window through `timeFlags`
 errors stay uniform, and add a case for every way the window differs from the
 family contract. For a command that paginates, pass its page descriptor to
 `emitList` and extend the seeded pagination block of `scripts/e2e.sh`. Both
-contracts are in [`AGENTS.md`](AGENTS.md#time-windows).
+contracts are in the [technical design](docs/technical-design.md#time-windows).
 
 For changes to the metadata writes, keep every check and read ahead of the
 mutating statement, and report a failure after it through `emitAfterWrite` so
 the entry identity and a read-only recovery step survive. Test the
 committed-then-failed path together with the resulting store state; never
-describe a write that did not happen as successful. The contract is in
-[`AGENTS.md`](AGENTS.md#write-outcomes).
+describe a write that did not happen as successful. The contract is in the
+[technical design](docs/technical-design.md#write-outcomes).
 
 For changes to setup or login, keep `config set-context` offline and free of
 the credential store, with one merge for `--dry-run` and execution, and keep
@@ -114,8 +115,8 @@ credential-save and config-write failures separately. Recovery text must never
 lead from an unreadable credential store to a new CalDAV password, because a
 new one invalidates the previous one. Use `keyring.MockInit()` or a fake
 keyring and an `httptest` stub; a test must not reach the OS keychain or a real
-server. The contract and its differences from the siblings are in
-[`AGENTS.md`](AGENTS.md#team-service-presets-and-personal-login).
+server. The contract and its differences from the siblings are in the
+[technical design](docs/technical-design.md#team-service-presets-and-personal-login).
 
 For changes to `auth reuse`, match the complete service URL and the scheme
 before any credential access, and keep the command to what it does: it records
@@ -127,8 +128,8 @@ every new error its own hint and `next_steps`, and pass each advertised step
 through `assertRunnableStep`, which resolves it against the command tree: the
 context listing is `config get-contexts` here. Do not add a step to
 `scripts/e2e-setup.sh` that runs `auth reuse` where a source has an email,
-because it would read the OS keychain. The contract is in
-[`AGENTS.md`](AGENTS.md#reusing-an-existing-login).
+because it would read the OS keychain. The contract is in the
+[technical design](docs/technical-design.md#reusing-an-existing-login).
 
 ## Commits, changelog & versioning
 
@@ -143,7 +144,7 @@ tagged (rename `[Unreleased]` to the new version with today's date, add a fresh
 
 Treat documentation as part of the change. When a change affects the
 architecture, commands, flags, or output model, update the relevant file
-(`AGENTS.md`, `README.md`, the companion Skill under `skills/wecom-calendar/`,
+(`AGENTS.md`, `docs/technical-design.md`, `README.md`, the companion Skill under `skills/wecom-calendar/`,
 and the generated `docs/cli/`) in the same commit. The companion Skill is the
 agent's source of truth — keep it exactly in step with the real command tree and
 output fields. When it changes, bump its `version:` and the handshake value in

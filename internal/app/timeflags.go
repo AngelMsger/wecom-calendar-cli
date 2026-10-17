@@ -20,7 +20,7 @@ import (
 // requires --from. The parsing lives in pkg/timeutil, as in prometheus-cli.
 //
 // A calendar looks ahead, which the siblings' event and history filters never
-// do, so four things differ here on purpose (AGENTS.md records each one):
+// do, so four things differ here on purpose (docs/technical-design.md records each one):
 // the window may end in the future, an omitted bound defaults to 30 days from
 // today instead of to now, a date-only value is a local day rather than a UTC
 // one, and there is no --actor filter.

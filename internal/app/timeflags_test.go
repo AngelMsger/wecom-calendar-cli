@@ -166,7 +166,7 @@ func TestEventWindowDateIsALocalDay(t *testing.T) {
 }
 
 // Intentional difference (d): there is no actor filter; whoami and is_self
-// cover identity. Adding --actor means revisiting that decision in AGENTS.md.
+// cover identity. Adding --actor means revisiting that decision in docs/technical-design.md.
 func TestEventListHasNoActorFlag(t *testing.T) {
 	for _, cmd := range []string{"list", "get"} {
 		c, _, err := newEventCmd(&appState{}).Find([]string{cmd})
