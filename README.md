@@ -460,7 +460,8 @@ make docs       # regenerate the CLI reference under docs/cli/
 The [`docs/cli/`](docs/cli/) reference is generated from the cobra command tree
 by `cmd/gen-docs`, so it always matches `--help`. After changing a command or
 flag, run `make docs` and commit the result — CI fails if it drifts. See
-[AGENTS.md](AGENTS.md) for the architecture and `internal/` package layout,
+[CONTRIBUTING.md](CONTRIBUTING.md) for the package layout,
+[docs/technical-design.md](docs/technical-design.md) for the design,
 [docs/releasing.md](docs/releasing.md) for the release and npm trusted-publishing
 process, and [CHANGELOG.md](CHANGELOG.md) for the version history.
 
