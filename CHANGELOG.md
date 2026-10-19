@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-19
+
 ### Changed
 
 - The `skill` commands, the Skill notice and `doctor` read the Skill version,
@@ -463,7 +465,8 @@ below was written for it and ships here for the first time.
   CI on Linux. Live end-to-end behavior against the real WeCom server is
   verified manually.
 
-[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.2.3...v0.3.0
