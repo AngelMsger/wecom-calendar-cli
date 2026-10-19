@@ -6,8 +6,8 @@
 // write and team presets — comes from agent-cli-kit/config. This package
 // registers wecom-calendar-cli's fields, environment variables, file location
 // and command wording with it (schema.go), keeps the YAML shape of the file
-// and its legacy flat form (file.go), the `auth reuse` matching
-// (stored_context.go), the acquisition guide (setup.go) and the wizards, and
+// and its legacy flat form (file.go), how `auth reuse` sees the stored
+// contexts (reuse.go), the acquisition guide (setup.go) and the wizards, and
 // keeps the names the rest of the repo uses.
 //
 // Secrets (the app-specific CalDAV password) are never stored in the YAML
@@ -57,15 +57,16 @@ type Config struct {
 	// CredentialBaseURL preserves an equivalent stored URL's native lookup key.
 	// It is runtime-only and never changes the request destination.
 	CredentialBaseURL string `yaml:"-" json:"-"`
-	// MayReuse marks a context that `auth reuse` could complete: it has no WeCom
-	// email, and another stored context on the same service has one. It is
-	// runtime-only and unverified — the loader reads the config file, never a
-	// credential — and exists so recovery can offer reuse before a new CalDAV
-	// password, which would invalidate the previous one.
-	MayReuse bool       `yaml:"-" json:"-"`
-	BaseURL  string     `yaml:"server" config:"server"`
-	Auth     AuthConfig `yaml:"auth"`
-	Defaults Defaults   `yaml:"defaults"`
+	// ReuseStep is the `auth reuse` command that goes before any step leading
+	// to a CalDAV password for this context, or "" when the file offers nothing
+	// to reuse. It is set when the context has no WeCom email and another
+	// stored context on the same service has one. It is runtime-only and
+	// unverified — the loader reads the config file, never a credential — and
+	// exists because a new password would invalidate the previous one.
+	ReuseStep string     `yaml:"-" json:"-"`
+	BaseURL   string     `yaml:"server" config:"server"`
+	Auth      AuthConfig `yaml:"auth"`
+	Defaults  Defaults   `yaml:"defaults"`
 }
 
 // AuthConfig holds non-secret auth settings. CredentialURL is an optional,

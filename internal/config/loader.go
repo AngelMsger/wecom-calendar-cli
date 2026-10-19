@@ -69,7 +69,7 @@ func Load(opt LoadOptions) (*Resolved, error) {
 	kit.Decode(r.Values, &out.Config)
 	kit.Decode(r.Values, &out.Secrets)
 	out.Config.CredentialBaseURL = r.StoredServer
-	out.Config.MayReuse = mayReuse(out.Config, file, r.ActiveContext)
+	out.Config.ReuseStep = reuseStep(out.Config, out.Sources, file, r.ActiveContext)
 	return out, nil
 }
 

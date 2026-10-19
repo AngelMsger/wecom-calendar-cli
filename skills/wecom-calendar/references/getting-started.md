@@ -116,10 +116,9 @@ up, and do **not** re-initialize config inside the sandbox. Instead:
 
 - **Request elevated permissions** (or otherwise re-run with access to the
   user's real environment), then retry the same command once.
-- If the error then lists `auth reuse --dry-run` in its `next_steps`, another
-  context on the same server has a WeCom email and may already be signed in:
-  run it and, when it reports `available`, `auth reuse`. No password is
-  needed.
+- If the error then lists `--use-context <name> auth reuse` in its
+  `next_steps`, another context on the same server has a WeCom email and may
+  already be signed in: run that step. No password is needed.
 - If the host retry also reports credentials missing and there is no login to
   reuse, ask the user to run `wecom-calendar-cli auth login` (or `config init`)
   in their own terminal, or to export `WECOM_CALENDAR_*` env vars for the
@@ -153,7 +152,10 @@ wecom-calendar-cli --use-context team auth reuse             # record the email
 
 `auth reuse` verifies the stored password with the other context's email and
 records that email on the selected context. It copies no secret and replaces
-no existing email.
+no existing email. Its result names the login it used (`scheme`, `username`,
+`source_context`) and the check to run next (`doctor`). A working login is
+never replaced; `--from-context` and `--from-scheme basic` select a source
+explicitly.
 
 For preset team services, use `config set-context`, then `auth reuse` or
 `auth guide` and personal login; see [team setup](team-setup.md).

@@ -95,22 +95,24 @@ Two results look like failures and are not:
   In a sandbox it usually means the user's credential is just unreadable from
   here: request elevation and retry. Only when the host retry also reports it
   missing has the user not configured one — then follow the later
-  `next_steps` in order: `auth reuse --dry-run` when it is listed, then
+  `next_steps` in order: the `auth reuse` step when it is listed, then
   `auth guide`, and the user runs `auth login` (or `config init`) or exports
   `WECOM_CALENDAR_*`.
 - **`AUTH_NO_BASIC`** (config, 3) → an email or a password is missing. The
   common case is a team preset beside a signed-in personal context: contexts
   on one server share the stored password, so only the email is missing. The
-  `hint` then says so and `next_steps` starts with `auth reuse --dry-run` —
-  run it and, when it reports `available`, `auth reuse`; no password is
-  needed. Otherwise (for example `WECOM_CALENDAR_PASSWORD` without a username)
+  `hint` then says so and `next_steps` starts with
+  `--use-context <name> auth reuse` — run it; no password is needed. Otherwise (for example `WECOM_CALENDAR_PASSWORD` without a username)
   `next_steps` end with `auth guide`.
 - **`AUTH_REUSE_AMBIGUOUS`** (conflict, 11) → `auth reuse` verified more than
-  one email for the server. `details.contexts` names the candidates; repeat
-  with `--from-context <name>`, taking the name from `config get-contexts`.
+  one email for the server. `details.contexts` names the candidate contexts
+  and `details.candidates` every candidate; repeat with `--from-context <name>`,
+  taking the name from `config get-contexts`, or with `--from-scheme basic`
+  for the password stored for the server.
 - **`AUTH_REUSE_SOURCE_NOT_FOUND`** (not_found, 6) /
   **`AUTH_REUSE_SOURCE_MISMATCH`** (conflict, 11) → `--from-context` names a
-  context that does not exist, or one on another server or scheme.
+  context that does not exist, one on another server, or one with no email to
+  pair with `--from-scheme`.
 - **`AUTH_REUSE_TARGET_MISSING`** (config, 3) /
   **`AUTH_REUSE_TARGET_MISMATCH`** (conflict, 11) → the selected context is
   not in the config file, or a `--base-url` / `--auth-scheme` override selects
@@ -118,8 +120,9 @@ Two results look like failures and are not:
 - **`AUTH_REUSE_CONFIG_CHANGED`** / **`AUTH_REUSE_CREDENTIAL_CHANGED`**
   (conflict, 11) / **`AUTH_REUSE_WRITE_FAILED`** (config, 3) → the config file
   or the stored password changed during verification, or the result could not
-  be written. Nothing was saved; run `auth reuse --dry-run` again. No
-  `AUTH_REUSE_*` error is a reason to issue a CalDAV password. See
+  be written. Nothing was saved; run the `auth reuse` step `next_steps` lists,
+  which keeps an explicit source. No `AUTH_REUSE_*` error is a reason to issue
+  a CalDAV password. See
   [team-setup.md](team-setup.md#reuse-an-existing-login--auth-reuse).
 - **`CREDENTIAL_SERVICE_MISMATCH`** (config, 3) → the service URL in effect is
   not the one the stored credential belongs to. Select the context for the
@@ -183,7 +186,9 @@ Two results look like failures and are not:
 ## Recovery patterns
 
 - **auth (4)** → `wecom-calendar-cli auth status`; a server 401 means the
-  stored password was rejected, usually because a new one was issued. Ask the
+  stored password was rejected, usually because a new one was issued. When
+  `next_steps` starts with `auth reuse`, another context's login may apply;
+  run it first. Ask the
   user to fetch a fresh one and run `auth login` in their own terminal;
   `auth guide` prints where it comes from. Host access retries apply to the
   credential-resolution codes above, not to an ordinary 401. Do not initialize
@@ -191,7 +196,7 @@ Two results look like failures and are not:
 - **config (3) from credential resolution** → keep "the store is inaccessible"
   apart from "a credential must be acquired". The first is a host retry and
   nothing else. Before the second, check for a login to reuse: when
-  `next_steps` lists `auth reuse --dry-run`, run it first. See
+  `next_steps` lists `auth reuse`, run it first. See
   [team-setup.md](team-setup.md#a-new-password-invalidates-the-previous-one).
 - **not_found (6)** → verify the calendar `id` or event `uid` from a fresh
   `calendar list` / `event list`; if the store looks empty, you probably have

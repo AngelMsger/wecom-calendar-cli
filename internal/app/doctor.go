@@ -53,7 +53,7 @@ func newDoctorCmd(s *appState) *cobra.Command {
 					"When recovery_scope is host, retry `wecom-calendar-cli doctor` with access to the host user environment.",
 				}
 				if reportOffersReuse(report, s.cfg()) {
-					steps = append(steps, config.ReuseStep)
+					steps = append(steps, s.cfg().ReuseStep)
 				}
 				steps = append(steps, "Only configure credentials if the host retry also reports them missing.")
 				err := cerrors.New(cerrors.CategoryConfig, "DOCTOR_UNHEALTHY",
@@ -233,7 +233,7 @@ func diagnosticRecoveryScope(err error) string {
 // store is excluded: reuse reads the same store, and that failure is recovered
 // on the host.
 func reportOffersReuse(report doctorReport, cfg config.Config) bool {
-	if !cfg.MayReuse {
+	if cfg.ReuseStep == "" {
 		return false
 	}
 	for _, check := range report.Checks {

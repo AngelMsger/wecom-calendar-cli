@@ -2,6 +2,7 @@ package auth
 
 import (
 	kit "github.com/angelmsger/agent-cli-kit/auth"
+	"github.com/angelmsger/agent-cli-kit/credstore"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 )
@@ -15,20 +16,27 @@ import (
 // previous one, so a keychain a sandbox cannot read must not lead there.
 //
 // When another stored context on the same service already has a WeCom email
-// (cfg.MayReuse), an absent credential is offered `auth reuse` ahead of every
+// (cfg.ReuseStep), an absent credential is offered `auth reuse` ahead of every
 // step that acquires one. Reuse reads the same store, so it never joins an
 // inaccessible-store error either.
 func Resolve(cfg config.Config, secrets config.Secrets, store *Store) (Credential, error) {
+	cred, _, err := ResolveLookup(cfg, secrets, store)
+	return cred, err
+}
+
+// ResolveLookup is Resolve that also reports what the store answered, so
+// credential reuse can judge how far the answer can be trusted.
+func ResolveLookup(cfg config.Config, secrets config.Secrets, store *Store) (Credential, credstore.Lookup, error) {
 	// The password is the secret of whichever scheme is configured, so an
 	// unknown scheme still reports AUTH_BAD_SCHEME rather than a missing secret.
 	supplied := map[string]string{SchemeBasic: secrets.Password, cfg.Auth.Scheme: secrets.Password}
 	var missing []string
-	if cfg.MayReuse {
+	if cfg.ReuseStep != "" {
 		// The host retry stays first; reuse sits between it and the step that
 		// leads to a password.
-		missing = []string{config.ReuseStep, missingStep}
+		missing = []string{cfg.ReuseStep, missingStep}
 	}
-	cred, err := kit.Resolve(kit.Request{
+	cred, lookup, err := kit.ResolveLookup(kit.Request{
 		Scheme:       cfg.Auth.Scheme,
 		Username:     cfg.Auth.Username,
 		Secrets:      supplied,
@@ -37,9 +45,9 @@ func Resolve(cfg config.Config, secrets config.Secrets, store *Store) (Credentia
 		MissingSteps: missing,
 	}, store)
 	if err != nil {
-		return Credential{}, config.WithCredentialGuide(missingIdentityError(err, cfg), cfg)
+		return Credential{}, lookup, config.WithCredentialGuide(missingIdentityError(err, cfg), cfg)
 	}
-	return cred, nil
+	return cred, lookup, nil
 }
 
 // missingIdentityError puts `auth reuse` first when a context lacks only its
@@ -48,11 +56,11 @@ func Resolve(cfg config.Config, secrets config.Secrets, store *Store) (Credentia
 // beside a personal context, and it needs no password at all.
 func missingIdentityError(err error, cfg config.Config) error {
 	ce := cerrors.AsCLIError(err)
-	if ce.Code != "AUTH_NO_BASIC" || !cfg.MayReuse {
+	if ce.Code != "AUTH_NO_BASIC" || cfg.ReuseStep == "" {
 		return err
 	}
 	return ce.WithHint("This context has no WeCom email, and another context on the same server has one. `auth reuse` verifies that stored login and records its email here; no CalDAV password is needed, and none should be issued.").
-		WithNextSteps(append([]string{config.ReuseStep}, ce.NextSteps...)...)
+		WithNextSteps(append([]string{cfg.ReuseStep}, ce.NextSteps...)...)
 }
 
 // Save stores a credential's secret for later resolution and returns the

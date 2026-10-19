@@ -186,23 +186,27 @@ credential environment variables for non-interactive execution.</p>
       <h2>wecom-calendar-cli auth reuse</h2>
       <p class="short">Reuse an existing login in the selected context without signing in again</p>
       <pre>wecom-calendar-cli auth reuse [flags]</pre>
-      <p class="long">Fill in the selected context&#39;s missing WeCom email from another context on the
-same service whose stored login still works, instead of asking for a CalDAV
-password. Stored passwords are keyed by server host and scheme, so contexts on
-one server already share one, and nothing is copied. Reuse matches stored
-contexts by complete service URL and scheme, verifies the stored password with
-a candidate&#39;s email through the calendar-home check auth login runs, and
-records that email on the selected context. It never replaces an existing
-email, reads credentials from environment variables, switches the scheme or
-activates a context. --dry-run performs the same read-only verification and
-reports the proposed association. An unchanged or unavailable result is not
-proof of authentication; use auth status to check.</p>
+      <p class="long">Fill in the selected context&#39;s missing WeCom email from a login this machine
+already has for the same service, instead of asking for a CalDAV password.
+Stored passwords are keyed by server host and scheme, so contexts on one
+server already share one, and nothing is copied. Reuse matches stored
+contexts by complete service URL before it reads any credential, verifies
+the stored password with a candidate&#39;s email through the calendar-home check
+auth login runs, and records that email on the selected context. When no
+other context&#39;s login verifies, it also tries the password stored for this
+server with each email the server&#39;s contexts record. It never replaces an
+existing email, reads credentials from environment variables or activates a
+context. --from-context and --from-scheme select a source explicitly.
+--dry-run performs the same read-only verification and reports the proposed
+association. An unchanged or unavailable result is not proof of
+authentication; run the check next_steps names (doctor).</p>
       <h3>Options</h3>
       <table>
         <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
         <tr><td><code>--dry-run</code></td><td><code>false</code></td><td>verify and preview the identity association without writing</td></tr>
         <tr><td><code>--from-context</code></td><td></td><td>choose a matching source from config get-contexts when multiple identities are available</td></tr>
+        <tr><td><code>--from-scheme</code></td><td></td><td>use the password stored for this server under this scheme (basic), paired with each WeCom email recorded for the server, or with the --from-context one</td></tr>
         </tbody>
       </table>
       <h3>Examples</h3><pre>  wecom-calendar-cli --use-context team auth reuse --dry-run

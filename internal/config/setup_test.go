@@ -217,7 +217,7 @@ func TestSetupRecoveryQuotesContextNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.NextSteps) != 3 || !strings.HasSuffix(plan.NextSteps[0], " auth reuse --dry-run") {
+	if len(plan.NextSteps) != 3 || !strings.HasSuffix(plan.NextSteps[0], " auth reuse") {
 		t.Fatalf("the preset does not lead with reuse: %v", plan.NextSteps)
 	}
 	for _, step := range plan.NextSteps {

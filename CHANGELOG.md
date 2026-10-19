@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `auth reuse` now takes its decision from agent-cli-kit's shared `reuse`
+  package, the family's rule for reusing a login. Contexts on the server whose
+  email the stored password verifies still come first, and a context without an
+  email is still never read. When the keychain itself shows that every one of
+  them is rejected, the password stored for the server under the context's own
+  key is tried with each email recorded for the server, so a password no
+  context with an email points at any more is still found. These further
+  checks run within ten seconds of the start (or `--timeout` when shorter),
+  adopt only on that keychain evidence, and otherwise leave the earlier answer.
+  A scheme supplied by `--auth-scheme`, `WECOM_CALENDAR_AUTH_SCHEME`, `.env` or
+  a password variable keeps reuse to the contexts. A password missing for one
+  context no longer fails the command when another context's login verified
+  and the keychain answered during the run, and a rejected password is tried
+  once per run. Two spellings of one email are still one identity.
+- The `auth reuse` result adds `scheme`, `username` and `next_steps` (`doctor`
+  after `reused` or `unchanged`, the same command without `--dry-run` after
+  `available`, `auth guide` and `auth login` after `unavailable`);
+  `AUTH_REUSE_AMBIGUOUS` adds `details.candidates`.
+- `config set-context`, `auth guide`, `AUTH_NO_BASIC`,
+  `CREDENTIAL_NOT_VISIBLE_OR_MISSING` and an unhealthy `doctor` now offer
+  `wecom-calendar-cli --use-context '<name>' auth reuse`, which runs reuse
+  directly, instead of `auth reuse --dry-run`. An HTTP 401 lists it first too
+  when the config file shows a stored login could apply.
+
+### Added
+
+- `auth reuse --from-scheme basic` selects the password stored for the server,
+  paired with each WeCom email recorded for it or, with `--from-context`, with
+  that context's email.
+
+### Fixed
+
+- `config delete-context` and a `config init` edit no longer delete a stored
+  password that a context without a stored server URL still resolves through
+  the public endpoint, for example a team preset completed by `auth reuse`.
+
 ## [0.5.1] - 2026-10-19
 
 ### Changed

@@ -106,8 +106,9 @@ require "$(cat error.json)" CONTEXT_BASE_URL_MISMATCH; require "$(cat error.json
 # runs `auth reuse` where a source has an email: it would read the OS keychain.
 before="$(cat "$WORK/config/config.yaml")"
 out="$(run --use-context plain auth reuse --dry-run)"
-# The no-change result the Skill shows, byte for byte.
-[[ "$out" == $'{\n  "changed": false,\n  "context": "plain",\n  "dry_run": true,\n  "reason": "no matching stored identity can be reused",\n  "state": "unavailable",\n  "verified": false\n}' ]] \
+# The no-change result the Skill shows, byte for byte. Without an email of its
+# own the context cannot authenticate, so the next steps are the guide and login.
+[[ "$out" == $'{\n  "changed": false,\n  "context": "plain",\n  "dry_run": true,\n  "next_steps": [\n    "wecom-calendar-cli --use-context \'plain\' auth guide",\n    "wecom-calendar-cli --use-context \'plain\' auth login"\n  ],\n  "reason": "no matching stored identity can be reused",\n  "state": "unavailable",\n  "verified": false\n}' ]] \
   || fail "reuse preview changed: $out"
 refused 6 AUTH_REUSE_SOURCE_NOT_FOUND run --use-context plain auth reuse --from-context absent
 require "$(cat error.json)" '"wecom-calendar-cli config get-contexts"'
@@ -140,19 +141,23 @@ contexts:
       username: member@example.invalid
 YAML
 # A preset on that server, the guide and the guide's next steps all lead with
-# reuse, ahead of anything that asks for a password. They read the file only.
+# reuse, ahead of anything that asks for a password, and run it directly. They
+# read the file only.
 out="$(run_at "$WORK/member" config set-context team)"
-require "$out" "\"wecom-calendar-cli --use-context 'team' auth reuse --dry-run\","
+require "$out" $'"next_steps": [\n    "wecom-calendar-cli --use-context \'team\' auth reuse",\n'
 out="$(run_at "$WORK/member" --use-context team auth guide)"
 require "$out" 'No password is asked for and none is copied'
+require "$out" "--use-context 'team' auth reuse"
+# The reuse step already names its context; the guide does not name it twice.
+refuse "$out" "--use-context 'team' --use-context"
 # The projection the Skill shows for this case, byte for byte.
 out="$(run_at "$WORK/member" --use-context team auth guide --fields next_steps)"
-[[ "$out" == $'{\n  "next_steps": [\n    "wecom-calendar-cli --use-context \'team\' auth reuse --dry-run",\n    "wecom-calendar-cli --use-context \'team\' auth login"\n  ]\n}' ]] \
+[[ "$out" == $'{\n  "next_steps": [\n    "wecom-calendar-cli --use-context \'team\' auth reuse",\n    "wecom-calendar-cli --use-context \'team\' auth login"\n  ]\n}' ]] \
   || fail "guide next steps changed: $out"
 # A context that has its email is left as it is, and is not offered reuse.
 before="$(cat "$WORK/member/config.yaml")"
 out="$(run_at "$WORK/member" --use-context personal auth reuse)"
-[[ "$out" == $'{\n  "changed": false,\n  "context": "personal",\n  "dry_run": false,\n  "reason": "destination identity is already configured",\n  "state": "unchanged",\n  "verified": false\n}' ]] \
+[[ "$out" == $'{\n  "changed": false,\n  "context": "personal",\n  "dry_run": false,\n  "next_steps": [\n    "wecom-calendar-cli --use-context \'personal\' doctor"\n  ],\n  "reason": "destination identity is already configured",\n  "state": "unchanged",\n  "verified": false\n}' ]] \
   || fail "reuse on a complete context changed: $out"
 refuse "$(run_at "$WORK/member" --use-context personal auth guide)" 'auth reuse'
 [[ "$(cat "$WORK/member/config.yaml")" == "$before" ]] || fail 'an unchanged reuse rewrote the config'
