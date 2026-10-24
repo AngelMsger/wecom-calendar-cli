@@ -109,3 +109,37 @@ func TestDeleteContextKeepsACredentialAnotherContextUses(t *testing.T) {
 		t.Fatalf("unexpected contexts: %+v", after)
 	}
 }
+
+// A context that stores no server URL resolves the public endpoint, and with it
+// the secret stored for that endpoint. A preset that `auth reuse` completed is
+// often such a context, so deleting the personal context that spells the URL
+// out must keep the secret; once no context resolves it, it goes.
+func TestDeleteContextCountsAContextOnTheDefaultEndpoint(t *testing.T) {
+	s, _, _ := loginStateForTest(t)
+	file := config.File{CurrentContext: "personal", Contexts: []config.NamedContext{
+		personalContext("personal", "https://caldav.wecom.work/"),
+		{Name: "team", Auth: config.AuthConfig{Username: "member@example.test"}},
+		personalContext("other", "https://elsewhere.example.test/dav"),
+	}}
+	if err := config.WriteFile(s.cfgDir, file); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.Save(file.Contexts[0].BaseURL, auth.Credential{Scheme: "basic", Username: "member@example.test", Secret: "shared-password"}, s.store); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := captureCLI(t, s.cfgDir, "config", "delete-context", "personal"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := storedSecret(t, s.cfgDir, "https://caldav.wecom.work/"); err != nil || got != "shared-password" {
+		t.Fatalf("deleting the personal context removed the secret the preset resolves: %q %v", got, err)
+	}
+	if got, _, err := freshProcessCredential(t, s.cfgDir, "team"); err != nil || got.Secret != "shared-password" {
+		t.Fatalf("the preset lost its login: %v", err)
+	}
+	if _, _, err := captureCLI(t, s.cfgDir, "config", "delete-context", "team"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := storedSecret(t, s.cfgDir, "https://caldav.wecom.work/"); !errors.Is(err, auth.ErrSecretNotFound) {
+		t.Fatalf("an unused credential was left behind: %q %v", got, err)
+	}
+}

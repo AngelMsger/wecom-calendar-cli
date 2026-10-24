@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"reflect"
 
@@ -125,10 +126,16 @@ func completeLogin(s *appState, cfg config.Config, cred auth.Credential, service
 // 207 multistatus is the evidence. Any other answer is a failure, including a
 // 200 from an endpoint that is not this CalDAV server.
 func verifyCredential(s *appState, cfg config.Config, cred auth.Credential) error {
+	return verifyCredentialWithin(context.Background(), s, cfg, cred)
+}
+
+// verifyCredentialWithin verifies cred under parent, which may carry an earlier
+// deadline than the request timeout.
+func verifyCredentialWithin(parent context.Context, s *appState, cfg config.Config, cred auth.Credential) error {
 	if err := cred.Validate(); err != nil {
 		return err
 	}
-	ctx, cancel := cmdContext(s)
+	ctx, cancel := cmdContextWithin(parent, s)
 	defer cancel()
 	client, err := caldav.Build(caldav.BuildParams{BaseURL: cfg.BaseURL, AuthDecorator: cred.Decorator(), Timeout: s.timeout(), MaxRetries: cfg.Defaults.MaxRetries})
 	if err != nil {

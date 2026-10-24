@@ -55,8 +55,8 @@ Read, as the task needs them:
 
 - Run `make test` and `make e2e` before claiming a change is complete.
 - Output rendering, argv correction, the update check, the credential store,
-  credential resolution and the configuration engine come from
-  [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared by every
+  credential resolution, the configuration engine and the `auth reuse`
+  decision come from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), shared by every
   CLI in the family. Fix bugs in those there, not here.
 - The local SQLite store is this project's one structural departure from the
   stateless siblings. `sync` is the only writer to the raw-fact and derived
@@ -136,13 +136,12 @@ context resolves the same account, and only after the config file is written.
 ### Reusing an existing login
 
 Keep `auth reuse` separate from `config set-context`, which stays offline and
-credential-free. Match the complete normalized URL and the scheme before any
-credential access, preserve an email the destination already has, verify
-through `verifyCredential` before recording anything, and return network,
-permission and credential-store failures as they are. Never copy a secret, take
-an identity from the environment, switch the scheme or activate a context.
-Re-read the config file and re-resolve the source credential immediately
-before the write, and stop when either changed. When changing this flow, cover
+credential-free. Match the complete normalized URL before any credential
+access, preserve an email the destination already has, verify through
+`verifyCredential` before recording anything, and return network, permission
+and credential-store failures as they are. Never copy a secret, take an
+identity from the environment or activate a context. The decision is the kit's
+`reuse` package: change it there, not here. When changing this wiring, cover
 dry-run, ambiguity, scope mismatch, a preserved destination identity,
 concurrent config edits, credential rotation, a fresh-load resolution and each
 operational failure.

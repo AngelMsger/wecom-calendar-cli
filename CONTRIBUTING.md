@@ -37,7 +37,8 @@ SQLite store and queries them. The entrypoint is `cmd/wecom-calendar-cli/`;
   embedded-VTIMEZONE / non-IANA TZID resolution), and recurrence expansion.
 
 Output rendering, argv normalization, the release check, the credential store,
-credential resolution, the configuration engine, and the code behind `pkg/errors`
+credential resolution, the configuration engine, the `auth reuse` decision,
+and the code behind `pkg/errors`
 and `pkg/transport` come from
 [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit), which every CLI in
 the family shares. A fix to one of those belongs there; this repo then bumps the
@@ -118,9 +119,12 @@ keyring and an `httptest` stub; a test must not reach the OS keychain or a real
 server. The contract and its differences from the siblings are in the
 [technical design](docs/technical-design.md#team-service-presets-and-personal-login).
 
-For changes to `auth reuse`, match the complete service URL and the scheme
-before any credential access, and keep the command to what it does: it records
-a verified WeCom email on a context and never saves, copies or moves a secret.
+For changes to `auth reuse`, remember that the decision belongs to
+agent-cli-kit's `reuse` package: change the order of sources, the evidence or
+the deadline there, and keep this repository to describing its contexts,
+resolving, verifying and writing. Match the complete service URL before any
+credential access, and keep the command to what it does: it records a
+verified WeCom email on a context and never saves, copies or moves a secret.
 Cover dry-run, ambiguity, scope mismatch, a preserved destination identity, an
 edit to the config file and a rotated credential during verification, a
 fresh-load resolution, and each operational failure returned unchanged. Give

@@ -21,9 +21,15 @@ func storePath(cfgDir string) string {
 
 // cmdContext returns a context bounded by the resolved request timeout.
 func cmdContext(s *appState) (context.Context, context.CancelFunc) {
+	return cmdContextWithin(context.Background(), s)
+}
+
+// cmdContextWithin bounds parent, which may carry an earlier deadline, by the
+// resolved request timeout.
+func cmdContextWithin(parent context.Context, s *appState) (context.Context, context.CancelFunc) {
 	d := s.timeout()
 	if d <= 0 {
 		d = constants.DefaultTimeout
 	}
-	return context.WithTimeout(context.Background(), d)
+	return context.WithTimeout(parent, d)
 }

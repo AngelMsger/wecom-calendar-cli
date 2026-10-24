@@ -88,10 +88,9 @@ Do not reach for a non-existent "live query" flag: the freshness contract is
 - Nothing is configured yet → [getting-started.md](references/getting-started.md).
 - A context **has no WeCom email, but another context on the same server is
   signed in** — typically a team preset beside a personal context, failing
-  with `AUTH_NO_BASIC` → `--use-context <name> auth reuse --dry-run`, then the
-  same without `--dry-run`. No password is involved; never ask for or issue
-  one for this. See
-  [team-setup.md](references/team-setup.md#reuse-an-existing-login--auth-reuse).
+  with `AUTH_NO_BASIC` → the error lists `--use-context <name> auth reuse`
+  first; run it. No password is involved; never ask for or issue one for this.
+  See [team-setup.md](references/team-setup.md#reuse-an-existing-login--auth-reuse).
 - User asks **where the CalDAV password comes from, or how to sign in** →
   `auth guide` (offline), then they run `auth login` in their own terminal.
   Someone is **rolling the CLI out to a team** → `config set-context`. See
@@ -120,7 +119,7 @@ wecom-calendar-cli config init|show|path|get-contexts|use-context|delete-context
 wecom-calendar-cli config set-context <name> [--base-url u] [--credential-url u] \
     [--activate] [--overwrite] [--dry-run]          # offline service preset, no credentials
 wecom-calendar-cli auth guide                       # offline: where the CalDAV password comes from
-wecom-calendar-cli auth reuse [--from-context name] [--dry-run]
+wecom-calendar-cli auth reuse [--from-context name] [--from-scheme basic] [--dry-run]
                                        # adopt the verified WeCom email of another context on the same server
 wecom-calendar-cli auth login|status|logout         # Basic (email + CalDAV pw); login needs a terminal
 wecom-calendar-cli doctor                           # config / creds / connectivity / Skill state
@@ -233,10 +232,10 @@ situations apart, and check them in this order:
   `auth login` or `auth reuse`, or suggest a new password.
 - **Only the identity is missing**: the context has no WeCom email, and another
   context on the same server has one (`AUTH_NO_BASIC`; the error, `auth guide`,
-  `doctor` and `config set-context` then list `auth reuse --dry-run` ahead of
-  any login step). Contexts on one server share one stored password, so run
-  `--use-context <name> auth reuse --dry-run` and, when it reports
-  `available`, the same without `--dry-run`. Nobody enters a password.
+  `doctor` and `config set-context` then list
+  `--use-context <name> auth reuse` ahead of any login step). Contexts on one
+  server share one stored password, so run that step. Nobody enters a
+  password.
 - **A credential has to be acquired**: the host retry also reports it missing
   and there is no login to reuse, or the server rejected the stored password
   (`CALDAV_AUTH`, HTTP 401). Only then point the user at `auth guide` and ask
@@ -257,16 +256,20 @@ See [getting-started.md](references/getting-started.md).
 - Run `auth guide` for the acquisition steps and their source. WeCom has no web
   credential page, so `credential_url` is empty unless the team configured a
   page of its own. Never invent a URL, and never send a credential to one.
-- Once a service is preset, look for an existing login before asking for one.
-  When `next_steps` starts with `auth reuse --dry-run`, another context on
-  that server already has a WeCom email: preview, and when the preview reports
-  `available`, run `auth reuse`. It verifies the stored password with the
-  other context's email and records that email on the preset. It copies no
-  secret, replaces no email, activates nothing, and reads no credential from
-  the environment. Its result has `context`, `state`
-  (`available`, `reused`, `unchanged`, `unavailable`), `changed`, `verified`,
-  `dry_run`, and `source_context` or `reason`. `unchanged` and `unavailable`
-  do not prove the context can authenticate — keep the `auth status` check.
+- A context without a working login can adopt one already verified for the
+  same server. Workspace tools apply this during setup. Elsewhere the CLI lists
+  `auth reuse` ahead of any sign-in step — in `config set-context`,
+  `auth guide`, credential errors, `doctor` and after an HTTP 401 — and its
+  result names the next step and the login it used (`scheme`, `username`,
+  `source_context`). Run the step as listed. It verifies the stored password
+  with an email recorded for the server and records that email on the
+  context; it copies no secret, replaces no email, activates nothing, and
+  reads no credential from the environment. A working login is never replaced;
+  `--from-context` and `--from-scheme basic` select a source explicitly. The
+  result has `context`, `state` (`available`, `reused`, `unchanged`,
+  `unavailable`), `changed`, `verified`, `dry_run`, `next_steps` and the source
+  fields or `reason`. `unchanged` and `unavailable` do not prove the context can
+  authenticate — run the check `next_steps` names (`doctor`).
 - Otherwise direct the member to `auth login` in their own terminal; it
   verifies the password and saves it with their email. Do not ask for the
   password in chat or pass it as an argument. In non-interactive environments
@@ -274,7 +277,8 @@ See [getting-started.md](references/getting-started.md).
 - A server/context mismatch needs a matching context, not a new password. A
   partial login error names what was stored; the recovery is `auth login` again
   with the same password. `AUTH_REUSE_AMBIGUOUS` needs `--from-context <name>`
-  with a name from `config get-contexts`, not a login.
+  (or `--from-scheme basic`) from its `details.candidates` and
+  `config get-contexts`, not a login.
 
 See [team-setup.md](references/team-setup.md) for the output fields, conflict
 semantics, the credential page override, login reuse and failure recovery.

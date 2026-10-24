@@ -311,48 +311,59 @@ or issuing — a CalDAV password:
 ```bash
 wecom-calendar-cli --use-context team auth reuse --dry-run
 wecom-calendar-cli --use-context team auth reuse
-wecom-calendar-cli --use-context team auth status
+wecom-calendar-cli --use-context team doctor
 ```
 
 Stored passwords are keyed by the server's host and the auth scheme, so
 contexts on one server **already share one**, and `auth reuse` copies nothing.
 What the preset lacks is the WeCom email. Reuse matches the other stored
-contexts by the complete normalized server URL and the scheme before it reads
-any credential; WeCom CalDAV has no deployment flavor, organization or tenant,
-so that is the whole scope. It then verifies the stored password with a
-candidate's email, using the calendar-home request `auth login` and `doctor`
-send, and records that email on the selected context. A context that already
-has an email is left as it is. No secret is copied, no environment credential
-is read, the scheme and the current context do not change, and other contexts
+contexts by the complete normalized server URL before it reads any credential;
+WeCom CalDAV has no deployment flavor, organization or tenant, so that is the
+whole scope. It then verifies the stored password with a candidate's email,
+using the calendar-home request `auth login` and `doctor` send, and records
+that email on the selected context. When the keychain shows that every other
+context's email is rejected, it also tries the password stored for the server
+under the selected context's own key with each email recorded for the server,
+so a password no context with an email points at any more is still found;
+these further checks run within ten seconds (or `--timeout`). A context that
+already has an email is left as it is. No secret is copied, no environment
+credential is read, the current context does not change, and other contexts
 are untouched. If the config file or the stored password changes during
-verification, nothing is written.
+verification, nothing is written. The rules are the ones every CLI in the
+family shares, from [agent-cli-kit](https://github.com/AngelMsger/agent-cli-kit).
 
-The JSON result reports `context`, `state`, `changed`, `verified`, `dry_run`
-and, when a source was selected, `source_context`; `reason` explains a result
-that changed nothing. States are `available` (a verified preview), `reused`,
-`unchanged` and `unavailable`. The last two are not evidence of successful
-authentication, so keep the separate `auth status` check. Having no reusable
-identity is a normal no-change result: continue with `auth guide` and
+The JSON result reports `context`, `state`, `changed`, `verified`, `dry_run`,
+`next_steps` and, when a source was selected, `scheme`, `username` and, when
+the source is a context, `source_context`; `reason` explains a result that
+changed nothing or a source that is the stored password. States are
+`available` (a verified preview), `reused`, `unchanged` and `unavailable`. The
+last two are not evidence of successful authentication, so run the check
+`next_steps` names (`doctor`). Having no reusable identity is a normal
+no-change result, and its `next_steps` continue with `auth guide` and
 `auth login`. Network, permission and credential-store failures keep their
 structured errors instead of suggesting a fresh login.
 
 One stored password belongs to one WeCom account, so normally at most one
-email verifies, and a context whose email the server rejects is skipped.
-Several different verified identities return `AUTH_REUSE_AMBIGUOUS` (exit 11)
-with the candidate contexts in `details`; list the names with
-`config get-contexts` and repeat with `--from-context <name>`. The command
-never replaces an identity or switches the scheme. Like `auth login`, it
-updates this CLI's own settings and is therefore not blocked by read-only mode;
-`--dry-run` changes neither settings nor credentials.
+email verifies, and a context whose email the server rejects is skipped. Two
+spellings of one address are one identity. Several different verified
+identities return `AUTH_REUSE_AMBIGUOUS` (exit 11) with the candidates in
+`details`; list the names with `config get-contexts` and repeat with
+`--from-context <name>`. `--from-scheme basic` selects the password stored for
+the server explicitly, paired with each recorded email or, with
+`--from-context`, with that context's. A scheme supplied by `--auth-scheme`,
+`WECOM_CALENDAR_AUTH_SCHEME`, `.env` or `WECOM_CALENDAR_PASSWORD` keeps reuse to
+the other contexts. The command never replaces an identity. Like `auth login`,
+it updates this CLI's own settings and is therefore not blocked by read-only
+mode; `--dry-run` changes neither settings nor credentials.
 
 Because a new password is costly here, the CLI points at reuse before anything
 that leads to one. When the selected context has no WeCom email and another
 stored context on the same server has one, `config set-context` and
-`auth guide` put `auth reuse --dry-run` first in `next_steps`, the guide's
-`instructions` start with it, and `AUTH_NO_BASIC`,
-`CREDENTIAL_NOT_VISIBLE_OR_MISSING` and an unhealthy `doctor` list it ahead of
-their login steps. `CREDENTIAL_STORE_INACCESSIBLE` never does: reuse reads the
-same store, and an unreadable store is recovered on the host.
+`auth guide` put `wecom-calendar-cli --use-context '<name>' auth reuse` first
+in `next_steps`, the guide's `instructions` start with it, and `AUTH_NO_BASIC`,
+`CREDENTIAL_NOT_VISIBLE_OR_MISSING`, an unhealthy `doctor` and an HTTP 401 list
+it ahead of their login steps. `CREDENTIAL_STORE_INACCESSIBLE` never does:
+reuse reads the same store, and an unreadable store is recovered on the host.
 
 An override that only re-spells a context's server URL — a trailing slash, the
 host's case, the default port — resolves the credential stored for that
@@ -360,8 +371,9 @@ context without redirecting requests, and `auth logout` removes that same
 entry. A different complete URL cannot use it
 (`CREDENTIAL_SERVICE_MISMATCH`). Because contexts on one server share one
 stored secret, `config delete-context` and a `config init` edit remove it only
-when no remaining context still resolves it, and only after the config file
-has been written.
+when no remaining context still resolves it — a context without a stored URL
+resolves the public endpoint's — and only after the config file has been
+written.
 
 ## Commands
 
@@ -377,7 +389,7 @@ has been written.
 | `config` / `auth` / `doctor` | setup, credentials and diagnostics |
 | `config set-context` | preset a named context's service settings offline, without credentials (`--activate`, `--overwrite`, `--dry-run`); see [Team setup and personal login](#team-setup-and-personal-login) |
 | `auth guide` | show offline where the CalDAV password comes from, plus a team's own page when one is configured |
-| `auth reuse` | give the selected context the verified WeCom email of another context on the same server, without a password and without copying a secret (`--from-context`, `--dry-run`); see [Reuse an existing login](#reuse-an-existing-login) |
+| `auth reuse` | give the selected context the verified WeCom email of another context on the same server, without a password and without copying a secret (`--from-context`, `--from-scheme`, `--dry-run`); see [Reuse an existing login](#reuse-an-existing-login) |
 | `auth login` | verify the WeCom email and CalDAV password, then store both for the selected context |
 | `config get-contexts` / `use-context` / `delete-context` | manage multiple named servers |
 | `skill install` / `skill uninstall` | deploy or remove the embedded companion Skill (Claude Code, Codex, Cursor, Agents, Gemini, GitHub Copilot, OpenCode, Continue, Windsurf, Grok Build, Pi, Kilo Code, Roo Code) |

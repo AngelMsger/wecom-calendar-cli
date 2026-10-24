@@ -6,6 +6,7 @@ import (
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
+	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -323,13 +324,18 @@ func persistInitResult(s *appState, result *config.WizardResult, existing config
 }
 
 // credentialKey is the account a context's secret is stored under: the
-// server's host and the scheme. Every context on one server shares it.
+// server's host and the scheme. Every context on one server shares it. A
+// context that stores no server URL or scheme resolves the built-in defaults,
+// the public endpoint and basic, so its key derives from those.
 func credentialKey(nc config.NamedContext) string {
-	scheme := nc.Auth.Scheme
+	base, scheme := nc.BaseURL, nc.Auth.Scheme
+	if base == "" {
+		base = constants.DefaultServerURL
+	}
 	if scheme == "" {
 		scheme = auth.SchemeBasic
 	}
-	return auth.AccountKey(nc.BaseURL, scheme)
+	return auth.AccountKey(base, scheme)
 }
 
 // forgetUnusedCredential removes the secret stored for old unless one of the
