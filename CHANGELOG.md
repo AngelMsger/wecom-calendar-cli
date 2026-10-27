@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-27
+
 ### Changed
 
 - `auth reuse` now takes its decision from agent-cli-kit's shared `reuse`
@@ -32,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `wecom-calendar-cli --use-context '<name>' auth reuse`, which runs reuse
   directly, instead of `auth reuse --dry-run`. An HTTP 401 lists it first too
   when the config file shows a stored login could apply.
+- Update the companion Skill to `0.5.1` for `auth reuse`.
 
 ### Added
 
@@ -503,7 +506,8 @@ below was written for it and ships here for the first time.
   CI on Linux. Live end-to-end behavior against the real WeCom server is
   verified manually.
 
-[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/AngelMsger/wecom-calendar-cli/compare/v0.3.0...v0.4.0
