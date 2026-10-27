@@ -1,6 +1,6 @@
 ---
 name: wecom-calendar
-version: 0.5.0
+version: 0.5.1
 description: "Sync WeCom (Enterprise WeChat) calendars over CalDAV into a local SQLite store, then query it and maintain an agent-owned metadata layer (event classification, external task links). Use when the user mentions a WeCom / 企业微信 calendar, schedule or 日程 and asks to sync or refresh calendar data, list calendars, see or find events in a date range — including history more than 30 days from today, which the official wecom-cli cannot list — read one event's full detail (description, location, organizer, attendees), or annotate, classify, tag or link an event to a task (e.g. a Feishu project item) and read those annotations. It never changes the calendar; creating, editing or cancelling events belongs to wecom-cli. Queries read the local store, so run `sync` first and re-sync when a read prints `_notice.stale`. `meta set` / `meta delete` are the only writes; they honor read-only mode (WECOM_CALENDAR_CLI_READ_ONLY=1 / defaults.read_only; --allow-writes overrides) and accept --dry-run."
 metadata:
   requires:
@@ -193,7 +193,7 @@ event details the question did not need.
 The full rules, including how to preserve existing annotations, are in
 [working-with-the-user.md](references/working-with-the-user.md).
 
-## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.5.0`
+## Agent handshake — set `WECOM_CALENDAR_CLI_SKILL=0.5.1`
 
 Once you have loaded this Skill, export that exact value in the environment
 used to run the CLI. The CLI compares it with the embedded Skill version and
