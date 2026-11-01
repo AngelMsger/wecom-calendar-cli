@@ -87,15 +87,17 @@ user's to set up; an agent adds one only when asked.
 
 `--full` ignores the change-tags **and** the known-bad records, re-listing and
 re-fetching every calendar's events. Use it when you suspect the store drifted
-(a partial sync was interrupted, the server's tag semantics missed a change, or
-a previously-unparseable resource should be retried after a fix). It is heavier
+(the server's tag semantics missed a change, or a previously-unparseable
+resource should be retried after a fix). It is heavier
 but produces the same end state — `sync` is idempotent.
 
 ## Idempotency
 
 Running `sync` twice with no server-side change is a no-op: the second run sees
 identical change-tags and etags and writes nothing. An interrupted sync can be
-safely re-run; it resumes reconciliation rather than duplicating rows. Event
+safely re-run with plain `sync`: each resource's etag and events are saved
+together, so whatever the interruption cut off is fetched again, and nothing is
+duplicated. Event
 identity is the CalDAV UID, so re-fetching an event updates its row in place
 instead of inserting a duplicate.
 

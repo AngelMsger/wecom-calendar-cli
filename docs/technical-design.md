@@ -59,6 +59,11 @@ Empirically verified; generic CalDAV libraries fail here:
 - Incremental sync keys off the per-calendar `getctag`; within a scanned
   calendar it skips resources whose `getetag` (the one from `calendar-query`,
   **not** the GET `ETag` header — they differ here) is unchanged.
+- Each fetched resource is written in one SQLite transaction: its `getetag` and
+  content hash, its events and attendees, the end of any failure record, and the
+  soft-deletion of events it no longer holds. A stored `getetag` therefore always
+  vouches for the events beside it; an interrupted or failed write leaves the
+  previous state whole, and the next sync fetches the resource again.
 - The server lists resources it then 404s, and some bodies won't parse. These
   are recorded in `calendar_resource_failures` by `getetag` and skipped, so a
   permanently-broken resource does **not** withhold its calendar's `getctag` and

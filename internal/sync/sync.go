@@ -271,24 +271,24 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 			}
 			continue
 		}
-		stats.ResourcesFetched++
+		// The resource, its events and the end of any failure record land
+		// together or not at all, so a stored etag always vouches for the events
+		// beside it and an interrupted write is fetched again next time.
 		sum := sha256.Sum256([]byte(r.ics))
-		if err := st.UpsertResourceContent(cal.ID, r.ref.Href, r.etag, hex.EncodeToString(sum[:]), len(r.ics), now, runID); err != nil {
-			return err
+		resource := store.ResourceInput{
+			CalendarID: cal.ID, Href: r.ref.Href, Etag: r.etag,
+			ContentSHA256: hex.EncodeToString(sum[:]), ByteSize: len(r.ics),
+			Events: make([]store.EventInput, 0, len(evs)),
 		}
-		_ = st.ClearResourceFailure(cal.ID, r.ref.Href) // fetched+parsed cleanly: no longer bad
-		keep := make([][2]string, 0, len(evs))
 		for _, ev := range evs {
-			keep = append(keep, [2]string{ev.UID, ev.RecurrenceIDKey})
-			if err := st.UpsertEvent(toInput(cal.ID, r.ref.Href, ev, r.ics), now, runID); err != nil {
-				return err
-			}
-			stats.EventsUpserted++
+			resource.Events = append(resource.Events, toInput(ev, r.ics))
 		}
-		n, err := st.SoftDeleteHrefEventsNotIn(cal.ID, r.ref.Href, keep, now)
+		n, err := st.SaveResource(resource, now, runID)
 		if err != nil {
 			return err
 		}
+		stats.ResourcesFetched++
+		stats.EventsUpserted += len(resource.Events)
 		stats.EventsSoftDeleted += n
 	}
 
@@ -391,12 +391,13 @@ func startFetchHeartbeat(progress func(ProgressEvent), cal caldav.Calendar, tota
 	return func() { once.Do(func() { close(stop); <-done }) }
 }
 
-// toInput maps a parsed event plus its full resource ICS into a store input.
-// The whole VCALENDAR body (with its VTIMEZONE, RRULE and EXDATE) is stored on
-// each event row so expansion and re-labeling can reparse it self-contained.
-func toInput(calID, href string, ev ical.Event, resourceICS string) store.EventInput {
+// toInput maps a parsed event plus its full resource ICS into a store input;
+// SaveResource files it under its resource's calendar and href. The whole
+// VCALENDAR body (with its VTIMEZONE, RRULE and EXDATE) is stored on each event
+// row so expansion and re-labeling can reparse it self-contained.
+func toInput(ev ical.Event, resourceICS string) store.EventInput {
 	in := store.EventInput{
-		CalendarID: calID, UID: ev.UID, RecurrenceKey: ev.RecurrenceIDKey, SourceHref: href,
+		UID: ev.UID, RecurrenceKey: ev.RecurrenceIDKey,
 		Summary: ev.Summary, Description: ev.Description, Location: ev.Location,
 		Start: ev.Start, End: ev.End, AllDay: ev.AllDay, Status: ev.Status,
 		Sequence: ev.Sequence, RRule: ev.RRule, RecurrenceRaw: ev.RecurrenceIDRaw,

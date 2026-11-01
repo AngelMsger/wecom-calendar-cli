@@ -138,3 +138,71 @@ func TestMetadataSurvivesResync(t *testing.T) {
 		t.Fatalf("metadata lost or altered by re-sync: %+v", rows)
 	}
 }
+
+// TestSaveResourceIsAtomic: the stored etag is what lets an incremental sync
+// skip a resource, so a write that fails partway must leave the previous etag
+// and events whole. Otherwise the next sync would skip the resource and keep
+// half-written events until a --full rescan.
+func TestSaveResourceIsAtomic(t *testing.T) {
+	st := openTemp(t)
+	now := time.Unix(1_700_000_000, 0)
+	run, _ := st.BeginSyncRun("incremental", now)
+	first := ResourceInput{CalendarID: "c1", Href: "/c1/x.ics", Etag: "e1",
+		Events: []EventInput{{UID: "a", Summary: "v1", RawICS: "x"}}}
+	if _, err := st.SaveResource(first, now, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`CREATE TRIGGER fail_b BEFORE INSERT ON calendar_events
+		WHEN NEW.uid = 'b' BEGIN SELECT RAISE(ABORT, 'disk full'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordResourceFailure("c1", "/c1/x.ics", "e0", "unparseable", now); err != nil {
+		t.Fatal(err)
+	}
+	second := ResourceInput{CalendarID: "c1", Href: "/c1/x.ics", Etag: "e2", Events: []EventInput{
+		{UID: "a", Summary: "v2", RawICS: "y"},
+		{UID: "b", Summary: "new", RawICS: "y"},
+	}}
+	if _, err := st.SaveResource(second, now.Add(time.Hour), run); err == nil {
+		t.Fatal("want the failed event write to fail the save")
+	}
+	etags, err := st.ResourceEtags("c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if etags["/c1/x.ics"] != "e1" {
+		t.Fatalf("etag advanced past a failed write: %q", etags["/c1/x.ics"])
+	}
+	var summary string
+	if err := st.db.QueryRow(`SELECT summary FROM calendar_events WHERE uid='a'`).Scan(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary != "v1" {
+		t.Fatalf("want the earlier event untouched, got %q", summary)
+	}
+	if failed, _ := st.ResourceFailures("c1"); failed["/c1/x.ics"] != "e0" {
+		t.Fatalf("want the failure record kept, got %v", failed)
+	}
+
+	if _, err := st.db.Exec(`DROP TRIGGER fail_b`); err != nil {
+		t.Fatal(err)
+	}
+	n, err := st.SaveResource(ResourceInput{CalendarID: "c1", Href: "/c1/x.ics", Etag: "e3",
+		Events: []EventInput{{UID: "b", RawICS: "z"}}}, now.Add(2*time.Hour), run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || countLiveEvents(t, st) != 1 {
+		t.Fatalf("want the dropped event soft-deleted and one live, got %d deleted, %d live", n, countLiveEvents(t, st))
+	}
+	if failed, _ := st.ResourceFailures("c1"); len(failed) != 0 {
+		t.Fatalf("want the failure record cleared, got %v", failed)
+	}
+	var calID, href string
+	if err := st.db.QueryRow(`SELECT calendar_id, source_href FROM calendar_events WHERE uid='b'`).Scan(&calID, &href); err != nil {
+		t.Fatal(err)
+	}
+	if calID != "c1" || href != "/c1/x.ics" {
+		t.Fatalf("want events filed under their resource, got %q %q", calID, href)
+	}
+}
