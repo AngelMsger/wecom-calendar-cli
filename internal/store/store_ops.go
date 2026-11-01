@@ -456,51 +456,42 @@ func softDeleteHrefEventsNotIn(x execer, calID, href string, keep [][2]string, n
 	return int(n), nil
 }
 
-// SoftDeleteResourcesNotSeen soft-deletes (and returns) resources not touched
-// since runStartMs — i.e. absent from this run's full listing.
-func (s *Store) SoftDeleteResourcesNotSeen(calID string, runStartMs int64, now time.Time) ([]string, error) {
-	rows, err := s.db.Query(
-		`SELECT href FROM calendar_resources
+// RemoveUnlistedResources tombstones, in one transaction, every live resource
+// of the calendar not seen since runStartMs (absent from this run's full
+// listing) together with its events, so an interruption can never leave a
+// tombstoned resource with live events. The same statement tombstones any live
+// event already left under a tombstoned resource, which a sync interrupted
+// between the two steps could leave behind before they shared a transaction:
+// the not-seen query skips tombstoned resources, so nothing else would repair
+// them. It returns how many resources and events were soft-deleted.
+func (s *Store) RemoveUnlistedResources(calID string, runStartMs int64, now time.Time) (resources, events int, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	iso, ms := isoMs(now)
+	res, err := tx.Exec(
+		`UPDATE calendar_resources SET deleted_at=?, deleted_at_ms=?
 		 WHERE calendar_id=? AND deleted_at IS NULL
-		   AND (last_seen_at_ms IS NULL OR last_seen_at_ms < ?)`, calID, runStartMs)
+		   AND (last_seen_at_ms IS NULL OR last_seen_at_ms < ?)`, iso, ms, calID, runStartMs)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
-	var gone []string
-	for rows.Next() {
-		var h string
-		if err := rows.Scan(&h); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		gone = append(gone, h)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	iso, ms := isoMs(now)
-	for _, h := range gone {
-		if _, err := s.db.Exec(
-			`UPDATE calendar_resources SET deleted_at=?, deleted_at_ms=? WHERE calendar_id=? AND href=?`,
-			iso, ms, calID, h); err != nil {
-			return nil, err
-		}
-	}
-	return gone, nil
-}
-
-// SoftDeleteEventsByHref soft-deletes every live event of a resource.
-func (s *Store) SoftDeleteEventsByHref(calID, href string, now time.Time) (int, error) {
-	iso, ms := isoMs(now)
-	res, err := s.db.Exec(
+	r, _ := res.RowsAffected()
+	res, err = tx.Exec(
 		`UPDATE calendar_events SET deleted_at=?, deleted_at_ms=?
-		 WHERE calendar_id=? AND source_href=? AND deleted_at IS NULL`, iso, ms, calID, href)
+		 WHERE calendar_id=? AND deleted_at IS NULL
+		   AND source_href IN (SELECT href FROM calendar_resources
+		                       WHERE calendar_id=? AND deleted_at IS NOT NULL)`, iso, ms, calID, calID)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	e, _ := res.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return int(r), int(e), nil
 }
 
 // LastSuccessfulSyncMs returns the finish time (UTC ms) of the most recent

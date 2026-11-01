@@ -292,17 +292,14 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 		stats.EventsSoftDeleted += n
 	}
 
-	goneRes, err := st.SoftDeleteResourcesNotSeen(cal.ID, runStartMs, now)
+	// Resources the server no longer lists are tombstoned with their events in
+	// one transaction, which also repairs events an older interrupted sync left
+	// live under an already-tombstoned resource.
+	_, gone, err := st.RemoveUnlistedResources(cal.ID, runStartMs, now)
 	if err != nil {
 		return err
 	}
-	for _, h := range goneRes {
-		n, err := st.SoftDeleteEventsByHref(cal.ID, h, now)
-		if err != nil {
-			return err
-		}
-		stats.EventsSoftDeleted += n
-	}
+	stats.EventsSoftDeleted += gone
 	// Drop failure records for resources the server no longer lists. The stale
 	// set is computed here (from the failures already loaded above) rather than
 	// by handing the store every href, so the DELETE binds a handful of

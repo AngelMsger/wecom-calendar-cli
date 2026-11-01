@@ -97,7 +97,8 @@ Running `sync` twice with no server-side change is a no-op: the second run sees
 identical change-tags and etags and writes nothing. An interrupted sync can be
 safely re-run with plain `sync`: each resource's etag and events are saved
 together, so whatever the interruption cut off is fetched again, and nothing is
-duplicated. Event
+duplicated. A resource the server dropped is tombstoned together with its
+events, so an interruption never leaves a deleted resource's events live. Event
 identity is the CalDAV UID, so re-fetching an event updates its row in place
 instead of inserting a duplicate.
 

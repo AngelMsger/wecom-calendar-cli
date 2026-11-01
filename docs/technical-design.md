@@ -64,6 +64,12 @@ Empirically verified; generic CalDAV libraries fail here:
   soft-deletion of events it no longer holds. A stored `getetag` therefore always
   vouches for the events beside it; an interrupted or failed write leaves the
   previous state whole, and the next sync fetches the resource again.
+- Resources missing from a calendar's full listing are tombstoned with their
+  events in one transaction (`RemoveUnlistedResources`). The sweep only selects
+  live resources, so the same statement also tombstones live events found under
+  an already-tombstoned resource: a sync interrupted between the two steps
+  before they shared a transaction could leave them, and nothing else would
+  repair them.
 - The server lists resources it then 404s, and some bodies won't parse. These
   are recorded in `calendar_resource_failures` by `getetag` and skipped, so a
   permanently-broken resource does **not** withhold its calendar's `getctag` and
