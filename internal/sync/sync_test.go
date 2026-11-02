@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	stdsync "sync"
 	"testing"
 	"time"
@@ -182,6 +183,56 @@ func TestSyncSkipsKnownBadOnRescan(t *testing.T) {
 	}
 	if n := c.getCount("/calendar/c1/good.ics"); n != 1 {
 		t.Fatalf("the new good resource should be fetched once, got %d", n)
+	}
+}
+
+// TestSyncKeepsListedKnownBadResource: a resource whose new revision cannot be
+// read keeps its last good events while the server still lists it. A re-scan
+// that skips it as known-bad must count it as seen; otherwise the unlisted
+// sweep tombstones those events as soon as anything else in the calendar moves.
+func TestSyncKeepsListedKnownBadResource(t *testing.T) {
+	notFound := cerrors.New(cerrors.CategoryNotFound, "CALDAV_NOT_FOUND", "gone")
+	for _, tc := range []struct {
+		name       string
+		unreadable func(c *fakeClient, href string)
+	}{
+		{"unparseable", func(c *fakeClient, href string) {
+			c.bodies[href] = caldav.RawEvent{Href: href, Etag: "e2", ICS: "this is not iCalendar"}
+		}},
+		{"404", func(c *fakeClient, href string) { c.errs = map[string]error{href: notFound} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := openStore(t)
+			u1, u2 := "/calendar/c1/u1.ics", "/calendar/c1/u2.ics"
+			c := &fakeClient{
+				calendars: []caldav.Calendar{{ID: "c1", Href: "/calendar/c1/", Ctag: "ctag1"}},
+				refs:      map[string][]caldav.EventRef{"/calendar/c1/": {{Href: u1, Etag: "e1"}}},
+				bodies:    map[string]caldav.RawEvent{u1: {Href: u1, Etag: "e1", ICS: goodICS}},
+			}
+			run(t, c, st)
+
+			// u1's new revision cannot be read: it is recorded known-bad.
+			c.calendars[0].Ctag = "ctag2"
+			c.refs["/calendar/c1/"] = []caldav.EventRef{{Href: u1, Etag: "e2"}}
+			tc.unreadable(c, u1)
+			run(t, c, st)
+
+			// Something else in the calendar changes; u1 is listed, unchanged.
+			c.calendars[0].Ctag = "ctag3"
+			c.refs["/calendar/c1/"] = []caldav.EventRef{{Href: u1, Etag: "e2"}, {Href: u2, Etag: "f1"}}
+			c.bodies[u2] = caldav.RawEvent{Href: u2, Etag: "f1", ICS: strings.ReplaceAll(goodICS, "UID:u1", "UID:u2")}
+			res := run(t, c, st)
+
+			if res.EventsSoftDeleted != 0 {
+				t.Fatalf("a listed known-bad resource lost %d events", res.EventsSoftDeleted)
+			}
+			if masters, _ := st.MastersForExpansion(); len(masters) != 2 {
+				t.Fatalf("want u1's last good event and u2 live, got %d masters", len(masters))
+			}
+			if n := c.getCount(u1); n != 2 {
+				t.Fatalf("the known-bad revision must not be re-fetched (want 2 GETs, got %d)", n)
+			}
+		})
 	}
 }
 

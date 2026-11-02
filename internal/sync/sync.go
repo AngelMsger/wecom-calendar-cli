@@ -201,7 +201,13 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 			continue
 		}
 		if fe, ok := failed[ref.Href]; ok && ref.Etag != "" && fe == ref.Etag {
-			continue // known-bad and unchanged: skip, do not re-fetch (--full retries it)
+			// Known-bad and unchanged: skip, do not re-fetch (--full retries it).
+			// The server still lists it, so mark it seen; otherwise the unlisted
+			// sweep below tombstones the last good events it holds.
+			if err := st.TouchResource(cal.ID, ref.Href, now); err != nil {
+				return err
+			}
+			continue
 		}
 		toFetch = append(toFetch, ref)
 	}

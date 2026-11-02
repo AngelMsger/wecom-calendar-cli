@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resource deleted but its events live, and no later `sync` (`--full` included)
   repaired them, so `event list` kept showing deleted events. The next `sync`
   also tombstones events already left behind that way.
+- `sync` no longer deletes the events of a resource the server still lists when
+  its latest revision cannot be read (the server 404s it or its body does not
+  parse). The first sync after such a revision kept the resource's last good
+  events, but the next re-scan of its calendar skipped the resource without
+  counting it as listed, so the sweep for dropped resources tombstoned them. They
+  now stay until the server drops the resource or serves a readable revision.
 
 ## [0.6.0] - 2026-10-27
 
