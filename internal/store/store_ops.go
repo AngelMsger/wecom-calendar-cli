@@ -354,6 +354,17 @@ func (s *Store) TouchResource(calID, href string, now time.Time) error {
 	return err
 }
 
+// MarkSeen records that the server still lists a live resource, so the unlisted
+// sweep keeps it. Unlike TouchResource it never revives a tombstoned one: only
+// SaveResource may, because it restores the events with it.
+func (s *Store) MarkSeen(calID, href string, now time.Time) error {
+	iso, ms := isoMs(now)
+	_, err := s.db.Exec(
+		`UPDATE calendar_resources SET last_seen_at=?, last_seen_at_ms=?
+		 WHERE calendar_id=? AND href=? AND deleted_at IS NULL`, iso, ms, calID, href)
+	return err
+}
+
 func upsertResourceContent(x execer, r ResourceInput, now time.Time, runID int64) error {
 	iso, ms := isoMs(now)
 	_, err := x.Exec(

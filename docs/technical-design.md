@@ -73,7 +73,12 @@ Empirically verified; generic CalDAV libraries fail here:
 - The server lists resources it then 404s, and some bodies won't parse. These
   are recorded in `calendar_resource_failures` by `getetag` and skipped, so a
   permanently-broken resource does **not** withhold its calendar's `getctag` and
-  force a perpetual full re-scan. `--full` re-attempts them.
+  force a perpetual full re-scan. `--full` re-attempts them. A skipped resource
+  still counts as listed, so the sweep keeps the last good events it holds
+  until the server drops it or serves a revision that parses
+  (`TestSyncKeepsListedKnownBadResource`). Marking it seen never revives a
+  tombstoned resource: only a readable revision does, together with its events
+  (`TestSyncDoesNotReviveATombstonedKnownBadResource`).
 
 ## The CLI and Skill upgrade loop
 

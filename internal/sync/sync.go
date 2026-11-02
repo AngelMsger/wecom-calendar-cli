@@ -201,7 +201,13 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 			continue
 		}
 		if fe, ok := failed[ref.Href]; ok && ref.Etag != "" && fe == ref.Etag {
-			continue // known-bad and unchanged: skip, do not re-fetch (--full retries it)
+			// Known-bad and unchanged: skip, do not re-fetch (--full retries it).
+			// The server still lists it, so mark it seen; otherwise the unlisted
+			// sweep below tombstones the last good events it holds.
+			if err := st.MarkSeen(cal.ID, ref.Href, now); err != nil {
+				return err
+			}
+			continue
 		}
 		toFetch = append(toFetch, ref)
 	}
@@ -327,7 +333,7 @@ func scanCalendar(ctx context.Context, client caldav.Client, st *store.Store, ca
 // getetag is present), false when it was not (so the calendar re-lists next time
 // to retry). The server provides getetags, so this is true in practice.
 func recordFailure(st *store.Store, calID string, ref caldav.EventRef, reason string, now time.Time) bool {
-	_ = st.TouchResource(calID, ref.Href, now)
+	_ = st.MarkSeen(calID, ref.Href, now)
 	if ref.Etag == "" {
 		return false
 	}
