@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `sync` now writes each fetched resource in one database transaction. It used
+  to store the resource's etag before its events, one statement at a time, so a
+  sync interrupted or failing partway could leave the new etag beside old or
+  missing events, and later incremental syncs skipped the resource until a
+  `sync --full`. Now the etag and the events land together or not at all, and an
+  interrupted resource is fetched again on the next sync.
+- `sync` now tombstones a resource the server dropped together with its events,
+  in one transaction. An interruption between the two used to leave the
+  resource deleted but its events live, and no later `sync` (`--full` included)
+  repaired them, so `event list` kept showing deleted events. The next `sync`
+  also tombstones events already left behind that way.
+
 ## [0.6.0] - 2026-10-27
 
 ### Changed

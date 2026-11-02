@@ -33,6 +33,22 @@ type EventInput struct {
 	Attendees                                  []AttendeeInput
 }
 
+// ResourceInput is one fetched and parsed CalDAV resource: the .ics body's
+// identity and every event parsed from it. Its events belong to it, so
+// SaveResource files them under its calendar and href.
+type ResourceInput struct {
+	CalendarID, Href string
+	Etag             string // the REPORT getetag the next sync compares against
+	ContentSHA256    string
+	ByteSize         int
+	Events           []EventInput
+}
+
+// execer runs one statement on the database or inside a transaction.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 // StoredCalendar is a calendar row for query output.
 type StoredCalendar struct {
 	ID          string `json:"id"`
@@ -263,12 +279,43 @@ func (s *Store) RecordResourceFailure(calID, href, etag, reason string, now time
 	return err
 }
 
-// ClearResourceFailure drops any failure record for a resource that now fetched
-// and parsed cleanly.
-func (s *Store) ClearResourceFailure(calID, href string) error {
-	_, err := s.db.Exec(
-		`DELETE FROM calendar_resource_failures WHERE calendar_id=? AND href=?`, calID, href)
-	return err
+// SaveResource records a fetched resource and the events parsed from it in one
+// transaction: its etag and content, the end of any failure record, each event
+// with its attendees, and the soft-deletion of events the resource no longer
+// holds. The etag is what lets the next incremental sync skip the resource, so
+// it must never land without the events it vouches for: an interruption or a
+// failed statement leaves the previous state whole, and the resource is fetched
+// again. It returns how many events were soft-deleted.
+func (s *Store) SaveResource(r ResourceInput, now time.Time, runID int64) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := upsertResourceContent(tx, r, now, runID); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(
+		`DELETE FROM calendar_resource_failures WHERE calendar_id=? AND href=?`,
+		r.CalendarID, r.Href); err != nil {
+		return 0, err
+	}
+	keep := make([][2]string, 0, len(r.Events))
+	for _, e := range r.Events {
+		e.CalendarID, e.SourceHref = r.CalendarID, r.Href
+		if err := upsertEvent(tx, e, now, runID); err != nil {
+			return 0, err
+		}
+		keep = append(keep, [2]string{e.UID, e.RecurrenceKey})
+	}
+	n, err := softDeleteHrefEventsNotIn(tx, r.CalendarID, r.Href, keep, now)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // deleteChunk bounds how many hrefs are bound into one DELETE. SQLite caps host
@@ -307,9 +354,9 @@ func (s *Store) TouchResource(calID, href string, now time.Time) error {
 	return err
 }
 
-func (s *Store) UpsertResourceContent(calID, href, etag, sha string, size int, now time.Time, runID int64) error {
+func upsertResourceContent(x execer, r ResourceInput, now time.Time, runID int64) error {
 	iso, ms := isoMs(now)
-	_, err := s.db.Exec(
+	_, err := x.Exec(
 		`INSERT INTO calendar_resources(calendar_id, href, etag, content_sha256, byte_size,
 		   first_seen_at, first_seen_at_ms, last_seen_at, last_seen_at_ms,
 		   last_changed_at, last_changed_at_ms, last_sync_run_id)
@@ -322,16 +369,22 @@ func (s *Store) UpsertResourceContent(calID, href, etag, sha string, size int, n
 		   last_changed_at_ms=CASE WHEN calendar_resources.content_sha256 IS excluded.content_sha256
 		       THEN calendar_resources.last_changed_at_ms ELSE excluded.last_changed_at_ms END,
 		   last_sync_run_id=excluded.last_sync_run_id, deleted_at=NULL, deleted_at_ms=NULL`,
-		calID, href, etag, sha, size, iso, ms, iso, ms, iso, ms, runID)
+		r.CalendarID, r.Href, r.Etag, r.ContentSHA256, r.ByteSize, iso, ms, iso, ms, iso, ms, runID)
 	return err
 }
 
+// UpsertEvent writes one event and its attendees on their own; a sync files
+// events through SaveResource.
 func (s *Store) UpsertEvent(e EventInput, now time.Time, runID int64) error {
+	return upsertEvent(s.db, e, now, runID)
+}
+
+func upsertEvent(x execer, e EventInput, now time.Time, runID int64) error {
 	iso, ms := isoMs(now)
 	startISO, startMs := optISOMs(e.Start)
 	endISO, endMs := optISOMs(e.End)
 	lmISO, lmMs := optISOMs(e.LastModified)
-	_, err := s.db.Exec(
+	_, err := x.Exec(
 		`INSERT INTO calendar_events(calendar_id, uid, recurrence_id_key, source_href,
 		   summary, description, location, dtstart_at, dtstart_at_ms, dtend_at, dtend_at_ms,
 		   all_day, status, sequence, rrule, recurrence_id_raw, organizer,
@@ -355,7 +408,7 @@ func (s *Store) UpsertEvent(e EventInput, now time.Time, runID int64) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.db.Exec(
+	if _, err := x.Exec(
 		`DELETE FROM event_attendees WHERE calendar_id=? AND uid=? AND recurrence_id_key=?`,
 		e.CalendarID, e.UID, e.RecurrenceKey); err != nil {
 		return err
@@ -364,7 +417,7 @@ func (s *Store) UpsertEvent(e EventInput, now time.Time, runID int64) error {
 		if a.Email == "" {
 			continue
 		}
-		if _, err := s.db.Exec(
+		if _, err := x.Exec(
 			`INSERT OR IGNORE INTO event_attendees(calendar_id, uid, recurrence_id_key, email, name, response_status)
 			 VALUES(?,?,?,?,?,?)`,
 			e.CalendarID, e.UID, e.RecurrenceKey, a.Email, a.Name, a.ResponseStatus); err != nil {
@@ -381,6 +434,10 @@ func (s *Store) UpsertEvent(e EventInput, now time.Time, runID int64) error {
 // a master and a new master both key on the empty recurrence id, so comparing
 // only recurrence keys would leave the old UID's master live as a ghost.
 func (s *Store) SoftDeleteHrefEventsNotIn(calID, href string, keep [][2]string, now time.Time) (int, error) {
+	return softDeleteHrefEventsNotIn(s.db, calID, href, keep, now)
+}
+
+func softDeleteHrefEventsNotIn(x execer, calID, href string, keep [][2]string, now time.Time) (int, error) {
 	iso, ms := isoMs(now)
 	q := `UPDATE calendar_events SET deleted_at=?, deleted_at_ms=?
 	      WHERE calendar_id=? AND source_href=? AND deleted_at IS NULL`
@@ -391,7 +448,7 @@ func (s *Store) SoftDeleteHrefEventsNotIn(calID, href string, keep [][2]string, 
 			args = append(args, k[0]+"\x1f"+k[1])
 		}
 	}
-	res, err := s.db.Exec(q, args...)
+	res, err := x.Exec(q, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -399,51 +456,42 @@ func (s *Store) SoftDeleteHrefEventsNotIn(calID, href string, keep [][2]string, 
 	return int(n), nil
 }
 
-// SoftDeleteResourcesNotSeen soft-deletes (and returns) resources not touched
-// since runStartMs — i.e. absent from this run's full listing.
-func (s *Store) SoftDeleteResourcesNotSeen(calID string, runStartMs int64, now time.Time) ([]string, error) {
-	rows, err := s.db.Query(
-		`SELECT href FROM calendar_resources
+// RemoveUnlistedResources tombstones, in one transaction, every live resource
+// of the calendar not seen since runStartMs (absent from this run's full
+// listing) together with its events, so an interruption can never leave a
+// tombstoned resource with live events. The same statement tombstones any live
+// event already left under a tombstoned resource, which a sync interrupted
+// between the two steps could leave behind before they shared a transaction:
+// the not-seen query skips tombstoned resources, so nothing else would repair
+// them. It returns how many resources and events were soft-deleted.
+func (s *Store) RemoveUnlistedResources(calID string, runStartMs int64, now time.Time) (resources, events int, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	iso, ms := isoMs(now)
+	res, err := tx.Exec(
+		`UPDATE calendar_resources SET deleted_at=?, deleted_at_ms=?
 		 WHERE calendar_id=? AND deleted_at IS NULL
-		   AND (last_seen_at_ms IS NULL OR last_seen_at_ms < ?)`, calID, runStartMs)
+		   AND (last_seen_at_ms IS NULL OR last_seen_at_ms < ?)`, iso, ms, calID, runStartMs)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
-	var gone []string
-	for rows.Next() {
-		var h string
-		if err := rows.Scan(&h); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		gone = append(gone, h)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	iso, ms := isoMs(now)
-	for _, h := range gone {
-		if _, err := s.db.Exec(
-			`UPDATE calendar_resources SET deleted_at=?, deleted_at_ms=? WHERE calendar_id=? AND href=?`,
-			iso, ms, calID, h); err != nil {
-			return nil, err
-		}
-	}
-	return gone, nil
-}
-
-// SoftDeleteEventsByHref soft-deletes every live event of a resource.
-func (s *Store) SoftDeleteEventsByHref(calID, href string, now time.Time) (int, error) {
-	iso, ms := isoMs(now)
-	res, err := s.db.Exec(
+	r, _ := res.RowsAffected()
+	res, err = tx.Exec(
 		`UPDATE calendar_events SET deleted_at=?, deleted_at_ms=?
-		 WHERE calendar_id=? AND source_href=? AND deleted_at IS NULL`, iso, ms, calID, href)
+		 WHERE calendar_id=? AND deleted_at IS NULL
+		   AND source_href IN (SELECT href FROM calendar_resources
+		                       WHERE calendar_id=? AND deleted_at IS NOT NULL)`, iso, ms, calID, calID)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	e, _ := res.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return int(r), int(e), nil
 }
 
 // LastSuccessfulSyncMs returns the finish time (UTC ms) of the most recent
