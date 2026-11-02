@@ -236,6 +236,45 @@ func TestSyncKeepsListedKnownBadResource(t *testing.T) {
 	}
 }
 
+// TestSyncDoesNotReviveATombstonedKnownBadResource: only a successful save may
+// revive a tombstoned resource, since it restores the events with it. Marking a
+// listed known-bad resource as seen must not, or its stored etag would vouch for
+// events that stay tombstoned: once the server served that etag again, the
+// unchanged-etag skip would never restore them.
+func TestSyncDoesNotReviveATombstonedKnownBadResource(t *testing.T) {
+	st := openStore(t)
+	u1 := "/calendar/c1/u1.ics"
+	cal := caldav.Calendar{ID: "c1", Href: "/calendar/c1/", Ctag: "ctag1"}
+	c := &fakeClient{
+		calendars: []caldav.Calendar{cal},
+		refs:      map[string][]caldav.EventRef{"/calendar/c1/": {{Href: u1, Etag: "e1"}}},
+		bodies:    map[string]caldav.RawEvent{u1: {Href: u1, Etag: "e1", ICS: goodICS}},
+	}
+	run(t, c, st)
+
+	// u1's next revision does not parse; then the calendar disappears, which
+	// tombstones u1 and its events but keeps the failure record.
+	c.calendars[0].Ctag = "ctag2"
+	c.refs["/calendar/c1/"] = []caldav.EventRef{{Href: u1, Etag: "e2"}}
+	c.bodies[u1] = caldav.RawEvent{Href: u1, Etag: "e2", ICS: "this is not iCalendar"}
+	run(t, c, st)
+	c.calendars = nil
+	run(t, c, st)
+
+	// The calendar returns with u1 still known-bad, then the server serves e1.
+	cal.Ctag = "ctag3"
+	c.calendars = []caldav.Calendar{cal}
+	run(t, c, st)
+	c.calendars[0].Ctag = "ctag4"
+	c.refs["/calendar/c1/"] = []caldav.EventRef{{Href: u1, Etag: "e1"}}
+	c.bodies[u1] = caldav.RawEvent{Href: u1, Etag: "e1", ICS: goodICS}
+	run(t, c, st)
+
+	if masters, _ := st.MastersForExpansion(); len(masters) != 1 {
+		t.Fatalf("u1 is served again but has %d live masters", len(masters))
+	}
+}
+
 // TestSyncFullRetriesKnownBad: --full ignores the known-bad record and re-attempts.
 func TestSyncFullRetriesKnownBad(t *testing.T) {
 	st := openStore(t)
