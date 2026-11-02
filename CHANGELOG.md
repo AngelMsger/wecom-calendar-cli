@@ -21,11 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repaired them, so `event list` kept showing deleted events. The next `sync`
   also tombstones events already left behind that way.
 - `--verbose` now also logs the requests of `doctor` and the login check, not
-  only those of commands, and its help says what it logs: each HTTP request's
-  method, URL and status on stderr. agent-cli-kit's transport writes it and
-  never writes headers or bodies, so the parse-error guidance no longer says
+  only those of commands, and its help says what it logs: each request to the
+  server (method, URL and status) on stderr. agent-cli-kit's transport writes it
+  and never writes headers or bodies, so the parse-error guidance no longer says
   `--verbose` shows the raw exchange; it says it shows each request's URL and
-  status.
+  status. The release check, which asks for a newer version, is not logged.
 
 ## [0.6.0] - 2026-10-27
 
