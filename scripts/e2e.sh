@@ -262,6 +262,17 @@ echo "== CLI and Skill upgrade loop =="
 # placeholder so the lookup can never be the developer's real keychain entry
 # for the public endpoint, and so no request can leave the machine.
 assert_stdout_contains "doctor reports Skill" '"companion-skill"' -- offline "${base[@]}" --base-url http://127.0.0.1:9 doctor --no-update-check
+# --verbose logs each request (method, URL, outcome) on stderr, never the
+# password. The password comes from the environment, so the credential store is
+# not read, and 127.0.0.1:9 refuses, so nothing leaves the machine.
+verbose_err="$(cd "$WORK" && env WECOM_CALENDAR_USERNAME=e2e@example.com WECOM_CALENDAR_PASSWORD=e2e-not-a-secret \
+  "${base[@]}" --base-url http://127.0.0.1:9 --verbose doctor --no-update-check 2>&1 >/dev/null)"
+if printf '%s\n' "$verbose_err" | grep -Eq '^[A-Z]+ http://127\.0\.0\.1:9/[^ ]* -> error: ' &&
+  ! printf '%s' "$verbose_err" | grep -qF 'e2e-not-a-secret'; then
+  pass "--verbose doctor logs its request on stderr, not the password"
+else
+  bad "--verbose doctor logs its request on stderr, not the password"
+fi
 SKILL_DIR="$WORK/skills"
 assert_stdout_contains "skill install alignment" '"alignment": "current"' \
   -- "$BIN" skill install --dir "$SKILL_DIR"

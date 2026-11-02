@@ -34,7 +34,7 @@ func defaultGuidance(cat Category) (hint string, steps []string) {
 			[]string{"Retry later.", "wecom-calendar-cli doctor"}
 	case CategoryParse:
 		return "A response or an iCalendar resource could not be parsed.",
-			[]string{"Retry with --verbose to inspect the raw exchange."}
+			[]string{"Retry with --verbose to see each request's URL and status."}
 	default:
 		return "An unexpected internal error occurred.",
 			[]string{"Retry with --verbose for details."}

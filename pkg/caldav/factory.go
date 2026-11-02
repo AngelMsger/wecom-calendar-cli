@@ -21,7 +21,8 @@ type BuildParams struct {
 	// AuthDecorator injects the Authorization header. May be nil for anonymous
 	// probes (which will fail against a real server).
 	AuthDecorator transport.Decorator
-	// Verbose, when non-nil, receives a per-request exchange log (--verbose).
+	// Verbose, when non-nil, receives the --verbose request log: one line per
+	// request with its method, URL and status, never headers or bodies.
 	Verbose io.Writer
 }
 
