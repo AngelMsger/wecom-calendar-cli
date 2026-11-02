@@ -23,8 +23,8 @@ scanned calendar, and a timed heartbeat inside a large calendar so it never goes
 silent. **stdout is untouched** — it still carries only the final JSON summary,
 so treat a `{"_notice":{"progress":…}}` line as liveness, not a result. Use
 `--progress none` to silence it, or `--progress json` to force notices on a
-terminal. (Distinct from `--verbose`, which logs every HTTP request for
-debugging — far more output, opt-in only.)
+terminal. (Distinct from `--verbose`, which logs each request to the calendar
+server for debugging — far more output, opt-in only.)
 
 ## Incremental by default
 
