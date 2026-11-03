@@ -137,7 +137,7 @@ func verifyCredentialWithin(parent context.Context, s *appState, cfg config.Conf
 	}
 	ctx, cancel := cmdContextWithin(parent, s)
 	defer cancel()
-	client, err := caldav.Build(caldav.BuildParams{BaseURL: cfg.BaseURL, AuthDecorator: cred.Decorator(), Timeout: s.timeout(), MaxRetries: cfg.Defaults.MaxRetries})
+	client, err := caldav.Build(caldav.BuildParams{BaseURL: cfg.BaseURL, AuthDecorator: cred.Decorator(), Timeout: s.timeout(), MaxRetries: cfg.Defaults.MaxRetries, Verbose: s.verboseLog()})
 	if err != nil {
 		return err
 	}

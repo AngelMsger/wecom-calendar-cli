@@ -99,17 +99,21 @@ func (s *appState) newClient(_ context.Context) (caldav.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	var verbose io.Writer
-	if s.gflags.verbose {
-		verbose = os.Stderr
-	}
 	return caldav.Build(caldav.BuildParams{
 		BaseURL:       cfg.BaseURL,
 		AuthDecorator: cred.Decorator(),
 		Timeout:       cfg.Defaults.Timeout,
 		MaxRetries:    cfg.Defaults.MaxRetries,
-		Verbose:       verbose,
+		Verbose:       s.verboseLog(),
 	})
+}
+
+// verboseLog is where --verbose writes its request log, or nil without it.
+func (s *appState) verboseLog() io.Writer {
+	if s.gflags.verbose {
+		return os.Stderr
+	}
+	return nil
 }
 
 // readOnly reports whether the effective posture for this invocation is

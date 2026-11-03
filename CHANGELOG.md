@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resource deleted but its events live, and no later `sync` (`--full` included)
   repaired them, so `event list` kept showing deleted events. The next `sync`
   also tombstones events already left behind that way.
+- `--verbose` now also logs the requests of `doctor` and the login check, not
+  only those of commands, and its help says what it logs: each request to the
+  server (method, URL and status) on stderr. agent-cli-kit's transport writes it
+  and never writes headers or bodies, so the parse-error guidance no longer says
+  `--verbose` shows the raw exchange; it says it shows each request's URL and
+  status. The release check, which asks for a newer version, is not logged.
 - `sync` no longer deletes the events of a resource the server still lists when
   its latest revision cannot be read (the server 404s it or its body does not
   parse). The first sync after such a revision kept the resource's last good
