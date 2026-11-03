@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and never writes headers or bodies, so the parse-error guidance no longer says
   `--verbose` shows the raw exchange; it says it shows each request's URL and
   status. The release check, which asks for a newer version, is not logged.
+- `sync` no longer deletes the events of a resource the server still lists when
+  its latest revision cannot be read (the server 404s it or its body does not
+  parse). The first sync after such a revision kept the resource's last good
+  events, but the next re-scan of its calendar skipped the resource without
+  counting it as listed, so the sweep for dropped resources tombstoned them. They
+  now stay until the server drops the resource or serves a readable revision.
 
 ## [0.6.0] - 2026-10-27
 
