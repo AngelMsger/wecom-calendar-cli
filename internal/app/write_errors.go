@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
@@ -17,41 +16,33 @@ import (
 // that returns an error did not apply. The one step that can still fail after
 // the commit is printing the result, so the rule applies there.
 
-// writeTarget names what a write addressed and the read that shows its state.
-type writeTarget struct {
-	description string
-	readSteps   []string
-}
-
-func metaWriteTarget(uid, ns, key string) writeTarget {
-	return writeTarget{
-		description: fmt.Sprintf("metadata entry %s / %s / %s", uid, ns, key),
-		readSteps: []string{constants.AppName + " meta get " +
-			shellArgument(uid) + " " + shellArgument(ns) + " " + shellArgument(key)},
+// metaWriteTarget names a metadata entry and the read that shows its state.
+func metaWriteTarget(uid, ns, key string) cerrors.WriteTarget {
+	return cerrors.WriteTarget{
+		Description: fmt.Sprintf("metadata entry %s / %s / %s", uid, ns, key),
+		ReadSteps: []string{constants.AppName + " meta get " +
+			cerrors.ShellArg(uid) + " " + cerrors.ShellArg(ns) + " " + cerrors.ShellArg(key)},
 	}
 }
 
-func shellArgument(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
-
-func writeResultError(err error, code, message string, target writeTarget) *cerrors.CLIError {
-	cause := cerrors.AsCLIError(err)
-	out := cerrors.Wrap(err, cause.Category, code, message+": "+cause.Message).
-		WithHint("Do not repeat the write; the local store already holds the change. Confirm it with the read command. After a delete, an empty list is the confirmation.").
-		WithNextSteps(target.readSteps...)
-	out.Retryable = false
-	return out
-}
+// localWriteHint replaces the kit's wording, which is about remote state: here
+// the change is already in the local store.
+const localWriteHint = "Do not repeat the write; the local store already holds the change. " +
+	"Confirm it with the read command. After a delete, an empty list is the confirmation."
 
 // emitAfterWrite prints the result of a committed metadata write. A failure
-// here must not read as a failed write: it keeps the entry's identity and the
-// original cause, and points at a read instead of a replay.
-func (s *appState) emitAfterWrite(v any, status string, target writeTarget) error {
-	err := s.emit(v)
-	if err == nil {
-		return nil
+// here must not read as a failed write: it is the kit's WriteSucceeded, which
+// keeps the entry's identity, the cause's category and the cause itself, is
+// not retryable and points at a read instead of a replay.
+func (s *appState) emitAfterWrite(v any, status string, target cerrors.WriteTarget) error {
+	if err := s.emit(v); err != nil {
+		return writeOutputFailed(err, status, target)
 	}
-	return writeResultError(err, "WRITE_SUCCEEDED_OUTPUT_FAILED",
-		"Write succeeded for "+target.description+" (status "+status+"), but printing its result failed", target)
+	return nil
+}
+
+func writeOutputFailed(err error, status string, target cerrors.WriteTarget) *cerrors.CLIError {
+	target.Description += " (status " + status + ")"
+	return cerrors.WriteSucceeded(err, "WRITE_SUCCEEDED_OUTPUT_FAILED", "printing its result failed", target).
+		WithHint(localWriteHint)
 }

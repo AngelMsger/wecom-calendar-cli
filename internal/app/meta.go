@@ -1,11 +1,8 @@
 package app
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/angelmsger/wecom-calendar-cli/internal/store"
@@ -187,9 +184,11 @@ func newMetaDeleteCmd(s *appState) *cobra.Command {
 						"meta delete removes data; pass --yes to confirm, or --dry-run to preview").
 						WithHint("Agents and scripts should preview with --dry-run, then delete with --yes.")
 				}
-				fmt.Fprintf(os.Stderr, "Delete metadata %s / %s / %s? [y/N]: ", uid, ns, key)
-				line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-				if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+				ok, err := prompter().Confirm(fmt.Sprintf("Delete metadata %s / %s / %s?", uid, ns, key))
+				if err != nil {
+					return err
+				}
+				if !ok {
 					return s.emit(map[string]any{"uid": uid, "namespace": ns, "key": key, "status": "aborted"})
 				}
 			}
@@ -217,17 +216,16 @@ func newMetaDeleteCmd(s *appState) *cobra.Command {
 	return cmd
 }
 
-// guardWrite blocks a mutating command under the read-only posture.
+// guardWrite blocks a mutating command under the read-only posture with the
+// family's READONLY_BLOCKED error. Read-only mode is the user's setting, so
+// the error names the user's switches without offering to change them.
 func (s *appState) guardWrite(op string) error {
 	if s.readOnly() {
-		return cerrors.Newf(cerrors.CategoryPermission, "READONLY_BLOCKED",
-			"%s is blocked by read-only mode", op).
-			WithHint("Pass --allow-writes, or unset defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY.").
-			WithNextSteps(
-				"Add --allow-writes to the command line",
-				"unset WECOM_CALENDAR_CLI_READ_ONLY",
-				"Set defaults.read_only=false in ~/.angelmsger/wecom-calendar/config.yaml",
-			)
+		return cerrors.ReadOnlyBlocked(op, cerrors.ReadOnlyMode{
+			Env:        "WECOM_CALENDAR_CLI_READ_ONLY",
+			ConfigFile: "~/.angelmsger/wecom-calendar/config.yaml",
+			DryRun:     true,
+		})
 	}
 	return nil
 }

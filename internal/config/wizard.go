@@ -1,12 +1,12 @@
 package config
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
+	"github.com/angelmsger/agent-cli-kit/terminal"
 	"github.com/angelmsger/wecom-calendar-cli/pkg/constants"
 	"golang.org/x/term"
 )
@@ -379,20 +379,12 @@ func runContextWizard(d PromptDriver, hooks WizardHooks, inputs WizardInputs, na
 type PlainDriver struct {
 	In  io.Reader
 	Out io.Writer
-	r   *bufio.Reader
 	err error
 }
 
 // NewPlainDriver returns a PlainDriver writing to out and reading from in.
 func NewPlainDriver(in io.Reader, out io.Writer) *PlainDriver {
 	return &PlainDriver{In: in, Out: out}
-}
-
-func (p *PlainDriver) reader() *bufio.Reader {
-	if p.r == nil {
-		p.r = bufio.NewReader(p.In)
-	}
-	return p.r
 }
 
 // Section prints a blank line and a section header so the user sees a visual
@@ -445,10 +437,11 @@ func (p *PlainDriver) AskSecretOptional(label string) (string, bool, error) {
 // secret reads without echoing on an interactive terminal. Piped or redirected
 // input has no hidden read, so it falls back to a line read.
 func (p *PlainDriver) secret(label string, optional bool) (string, error) {
-	if file, ok := p.In.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+	if terminal.Is(p.In) {
+		fd := int(p.In.(interface{ Fd() uintptr }).Fd())
 		for {
 			fmt.Fprintf(p.Out, "%s: ", label)
-			raw, err := term.ReadPassword(int(file.Fd()))
+			raw, err := term.ReadPassword(fd)
 			fmt.Fprintln(p.Out)
 			if err != nil {
 				return "", err
@@ -464,25 +457,13 @@ func (p *PlainDriver) secret(label string, optional bool) (string, error) {
 	return value, p.err
 }
 
-// readLine does not read ahead on terminals, so a later hidden prompt owns its bytes.
+// readLine reads one answer with the kit's terminal.ReadLine: a byte at a
+// time, so a later hidden prompt on a terminal owns its bytes. A read that
+// fails (not the end of input) returns its error and no line, so a truncated
+// answer is never taken. The end of input completes a partial line, and
+// returns io.EOF when nothing was read.
 func (p *PlainDriver) readLine() (string, error) {
-	if file, ok := p.In.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
-		var line strings.Builder
-		b := make([]byte, 1)
-		for {
-			n, err := file.Read(b)
-			if n > 0 {
-				if b[0] == '\n' {
-					return line.String(), nil
-				}
-				line.WriteByte(b[0])
-			}
-			if err != nil {
-				return line.String(), err
-			}
-		}
-	}
-	return p.reader().ReadString('\n')
+	return terminal.ReadLine(p.In)
 }
 
 func (p *PlainDriver) AskConfirm(label string, def bool) (bool, error) {
@@ -507,6 +488,11 @@ func (p *PlainDriver) text(label, def, example string, required bool) string {
 			fmt.Fprintf(p.Out, "%s: ", label)
 		}
 		line, err := p.readLine()
+		if err != nil && !errors.Is(err, io.EOF) {
+			// A failed read is not an answer, not even the default.
+			p.err = err
+			return ""
+		}
 		line = strings.TrimSpace(line)
 		if line == "" {
 			line = def

@@ -74,12 +74,11 @@ Blocked writes return a structured error:
   "error": {
     "category": "permission",
     "code": "READONLY_BLOCKED",
-    "message": "meta set is blocked by read-only mode",
-    "hint": "Pass --allow-writes, or unset defaults.read_only / WECOM_CALENDAR_CLI_READ_ONLY.",
+    "message": "operation \"meta set\" blocked: read-only mode is enabled",
+    "hint": "Read-only mode is on, so nothing was sent. The user turned it on (WECOM_CALENDAR_CLI_READ_ONLY or defaults.read_only in ~/.angelmsger/wecom-calendar/config.yaml), and only the user turns it off. --allow-writes lifts it for one invocation and is for a write the user authorized.",
     "next_steps": [
-      "Add --allow-writes to the command line",
-      "unset WECOM_CALENDAR_CLI_READ_ONLY",
-      "Set defaults.read_only=false in ~/.angelmsger/wecom-calendar/config.yaml"
+      "Add --dry-run to preview the request without sending it",
+      "Only if the user authorized this write, re-run with --allow-writes"
     ],
     "retryable": false
   }
