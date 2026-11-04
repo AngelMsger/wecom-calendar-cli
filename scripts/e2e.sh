@@ -209,7 +209,7 @@ assert_stdout_contains "meta set reports status" '"status": "set"' -- "${base[@]
 assert_stdout_contains "meta set overwrites"     '"value": "T-2"' -- "${base[@]}" meta set e2e-uid task link T-2
 "${base[@]}" meta get e2e-uid task link 2>/dev/null | grep -q 'T-1' \
   && bad "meta set merged instead of replacing" || pass "meta get shows only the last value"
-assert_stderr_contains "read-only block names the override" 'Add --allow-writes to the command line' \
+assert_stderr_contains "read-only block offers --allow-writes only for an authorized write" 'Only if the user authorized this write, re-run with --allow-writes' \
   -- env WECOM_CALENDAR_CLI_READ_ONLY=1 "${base[@]}" meta set e2e-uid class category x
 assert_stdout_contains "--allow-writes overrides read-only once" '"status": "set"' \
   -- env WECOM_CALENDAR_CLI_READ_ONLY=1 "${base[@]}" --allow-writes meta set e2e-uid class category customer-meeting

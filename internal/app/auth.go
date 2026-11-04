@@ -71,13 +71,13 @@ func newAuthLoginCmd(s *appState) *cobra.Command {
 			cred := auth.Credential{Scheme: cfg.Auth.Scheme, Username: cfg.Auth.Username}
 			var err error
 			if cred.Username == "" {
-				cred.Username, err = promptLine("WeCom email", "")
+				cred.Username, err = prompter().Line("WeCom email", "")
 				if err != nil {
 					return err
 				}
 				cred.Username = config.NormalizeUsername(cred.Username)
 			}
-			cred.Secret, err = promptSecret("App-specific password")
+			cred.Secret, err = prompter().Secret("App-specific password")
 			if err != nil {
 				return cerrors.Wrap(err, cerrors.CategoryConfig, "READ_SECRET",
 					"could not read the password from the terminal")

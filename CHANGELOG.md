@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Use agent-cli-kit v0.6.0. `READONLY_BLOCKED` now has the family's shared
+  wording: the message names the blocked command (`operation "meta set"
+  blocked: read-only mode is enabled`), the hint says read-only mode is the
+  user's setting (`WECOM_CALENDAR_CLI_READ_ONLY` or `defaults.read_only`), and
+  the next steps are `--dry-run` and, only for a write the user authorized,
+  `--allow-writes`. They no longer suggest unsetting the variable or editing
+  the config. Code, category and exit code are unchanged.
+- `WRITE_SUCCEEDED_OUTPUT_FAILED` is built with the kit's write rule
+  (`WriteSucceeded`); its code, message, hint and next steps are unchanged.
+  `pkg/errors` re-exports `WriteTarget`, `FromWrite`, `WriteSucceeded`,
+  `MissingWriteIdentity`, `ShellArg`, `ReadOnlyBlocked` and their codes.
+- Terminal checks and prompts (`auth login`, the `meta delete` confirmation)
+  use the kit's `terminal` package; their wording is unchanged.
+
 ### Fixed
+
+- `config init`'s plain prompts, and the `meta delete` confirmation, no longer
+  take an answer cut short by a failed read (not the end of input) as the
+  answer: a broken stdin can no longer confirm "Save configuration anyway?".
+  A prompt with a default still takes it at the end of input, as scripted
+  setups rely on.
 
 - `sync` now writes each fetched resource in one database transaction. It used
   to store the resource's etag before its events, one statement at a time, so a

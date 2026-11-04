@@ -130,8 +130,11 @@ error have no counterpart here. `WRITE_SUCCEEDED_OUTPUT_FAILED` takes their
 place and lives in `internal/app`, because `pkg/caldav` has no write to wrap.
 `meta set` is last-write-wins with no version check, so there is no conflict to
 merge in code; the Skill carries the read-merge-write rule instead.
-`READONLY_BLOCKED` lists the family's three override steps, and the Skill tells
-agents not to act on them without authorization. Tests:
+`WRITE_SUCCEEDED_OUTPUT_FAILED` is built with agent-cli-kit's `WriteSucceeded`
+and `WriteTarget`, with a hint about the local store in place of the kit's
+remote wording. `READONLY_BLOCKED` is the kit's `ReadOnlyBlocked`: it names the
+user's switches as theirs to change, and its next steps are `--dry-run` and,
+only for a write the user authorized, `--allow-writes`. Tests:
 `internal/app/write_errors_test.go` and the "committed writes" block of
 `scripts/e2e.sh`.
 

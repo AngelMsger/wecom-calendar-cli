@@ -3,17 +3,17 @@ package app
 import (
 	"os"
 
-	"golang.org/x/term"
+	"github.com/angelmsger/agent-cli-kit/terminal"
 )
 
-// isTerminal reports whether f is an interactive terminal. It uses a real
-// isatty check (not a ModeCharDevice heuristic, which also matches /dev/null and
-// other character devices) so the destructive-write confirmation gate and secret
-// prompts treat a redirected or piped stdin as non-interactive.
-func isTerminal(f *os.File) bool {
-	return f != nil && term.IsTerminal(int(f.Fd()))
-}
+// The process's streams are interactive only when their descriptor is a TTY:
+// stdin on /dev/null (cron, CI, agent runners) or a pipe is not. The kit's
+// terminal.Is is the family's single definition. stdinIsTTY gates the
+// destructive-write confirmation and the login prompts, so non-TTY callers fail
+// structurally rather than hang; stderrIsTTY keeps agent-only nudges and the
+// progress display off a pipe.
+func stdinIsTTY() bool  { return terminal.Is(os.Stdin) }
+func stderrIsTTY() bool { return terminal.Is(os.Stderr) }
 
-func stdinIsTTY() bool  { return isTerminal(os.Stdin) }
-func stdoutIsTTY() bool { return isTerminal(os.Stdout) }
-func stderrIsTTY() bool { return isTerminal(os.Stderr) }
+// prompter asks on stderr and reads stdin, so stdout stays a clean data channel.
+func prompter() terminal.Prompter { return terminal.Prompter{In: os.Stdin, Out: os.Stderr} }

@@ -101,8 +101,9 @@ func TestMetaOutputFailureWithoutWrite(t *testing.T) {
 		root, _ := newRootCmdWithState()
 		root.SetArgs([]string{"--config", cfgDir, "meta", "set", "uid-1", "task", "link", "T-1", "--format", "bogus"})
 		ce := cerrors.AsCLIError(root.Execute())
-		if ce == nil || ce.Code != "READONLY_BLOCKED" || len(ce.NextSteps) == 0 ||
-			ce.NextSteps[0] != "Add --allow-writes to the command line" {
+		if ce == nil || ce.Code != "READONLY_BLOCKED" || len(ce.NextSteps) != 2 ||
+			ce.Message != `operation "meta set" blocked: read-only mode is enabled` ||
+			ce.NextSteps[1] != "Only if the user authorized this write, re-run with --allow-writes" {
 			t.Fatalf("unexpected error: %+v", ce)
 		}
 		if _, err := os.Stat(storePath(cfgDir)); err == nil {
@@ -113,9 +114,7 @@ func TestMetaOutputFailureWithoutWrite(t *testing.T) {
 
 func TestWriteResultErrorPayload(t *testing.T) {
 	ioErr := errors.New("write /dev/stdout: broken pipe")
-	err := writeResultError(ioErr, "WRITE_SUCCEEDED_OUTPUT_FAILED",
-		"Write succeeded for metadata entry u / n / k (status set), but printing its result failed",
-		metaWriteTarget("it's", "n", "k"))
+	err := writeOutputFailed(ioErr, "set", metaWriteTarget("it's", "n", "k"))
 	if !errors.Is(err, ioErr) {
 		t.Fatal("lost output failure cause")
 	}
