@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use agent-cli-kit v0.7.0. Its HTTP client no longer follows a redirect of a
+  write; the CalDAV client only reads (GET, PROPFIND and REPORT, whose
+  same-origin redirects are still followed), so its behavior is unchanged.
 - Use agent-cli-kit v0.6.0. `READONLY_BLOCKED` now has the family's shared
   wording: the message names the blocked command (`operation "meta set"
   blocked: read-only mode is enabled`), the hint says read-only mode is the
