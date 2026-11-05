@@ -39,7 +39,7 @@ the differing fields of a preset conflict, or what a partial login stored.
 | 6 | not_found | the event is not in the local store, the server answered 404, or `auth reuse --from-context` names an unknown context; a missing metadata entry is not an error |
 | 7 | rate_limit | server throttling (429); wait, then retry; avoid `sync --full` in a tight loop |
 | 8 | network | DNS/TLS/timeout; check `WECOM_CALENDAR_SERVER`, run `doctor` |
-| 9 | server | CalDAV 5xx; retry later |
+| 9 | server | CalDAV 5xx (retry later when `retryable` is true), or a redirect (`http_status` 3xx, not retryable): check the server URL with `doctor` |
 | 10 | parse | a response (or a `.ics` body) could not be decoded; likely a client bug — re-run with `--verbose` |
 | 11 | conflict | a preset conflicts with an existing context (`CONFIG_CONTEXT_CONFLICT`), `auth reuse` needs a choice or saw a change (`AUTH_REUSE_*`), or the server answered 409; `meta` writes never conflict (see below) |
 
@@ -210,4 +210,7 @@ Two results look like failures and are not:
 - **rate_limit (7) / server (9) / network (8)** → these come from requests to
   the WeCom server, which are all reads. When `retryable` is `true`, retry
   with bounded backoff — a few attempts, not a loop — and prefer an
-  incremental `sync` over `sync --full` when throttled.
+  incremental `sync` over `sync --full` when throttled. A server error with a
+  3xx `http_status` is a redirect (a login page, a single sign-on proxy, or
+  an `http://` server URL that should use https): it is not retryable, so
+  run `doctor` and check the server URL instead.
