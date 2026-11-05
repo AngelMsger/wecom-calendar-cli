@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use agent-cli-kit v0.8.1. A PROPFIND or REPORT that the server answers
+  with a 301, 302 or 303 is no longer followed: Go would send a GET without
+  the request's body, and the page that GET got (a login page, say) answered
+  the CalDAV read. The redirect is now reported as itself: `CALDAV_SERVER`
+  (server, exit 9) with the redirect's status in `http_status`. Before, the
+  error came from that page: `CalDAV server returned HTTP 200` for a login
+  page, or the code for its status (`CALDAV_NOT_FOUND` for a 404, say). A 307
+  or 308, which keeps the method and body, is still followed, and a GET's
+  same-origin redirects are unchanged. For a library caller that passes its
+  own HTTP client (`Options.Doer`), the same holds: the kit answers such a
+  read with the redirect, not the GET's page.
 - Use agent-cli-kit v0.7.0. Its HTTP client no longer follows a redirect of a
   write; the CalDAV client only reads (GET, PROPFIND and REPORT, whose
   same-origin redirects are still followed), so its behavior is unchanged.
