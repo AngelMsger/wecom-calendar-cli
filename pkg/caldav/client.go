@@ -114,7 +114,7 @@ func (c *apiClient) GetEvent(ctx context.Context, href string) (RawEvent, error)
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return RawEvent{}, c.statusError(resp.StatusCode, data)
+		return RawEvent{}, c.statusError(resp, data)
 	}
 	return RawEvent{Href: href, Etag: strings.TrimSpace(resp.Header.Get("ETag")), ICS: string(data)}, nil
 }
@@ -138,12 +138,13 @@ func (c *apiClient) dav(ctx context.Context, method, path, body, depth string) (
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusMultiStatus {
-		return nil, nil, c.statusError(resp.StatusCode, data)
+		return nil, nil, c.statusError(resp, data)
 	}
 	return data, resp.Header, nil
 }
 
-func (c *apiClient) statusError(status int, body []byte) error {
+func (c *apiClient) statusError(resp *http.Response, body []byte) error {
+	status := resp.StatusCode
 	cat := cerrors.FromHTTPStatus(status)
 	code := "CALDAV_" + strings.ToUpper(string(cat))
 	msg := fmt.Sprintf("CalDAV server returned HTTP %d", status)
@@ -152,14 +153,10 @@ func (c *apiClient) statusError(status int, body []byte) error {
 		// The client follows only a redirect that sends the same read again
 		// to the same origin, so a redirect that comes back is one it cannot
 		// follow: a PROPFIND or REPORT's 301, 302 or 303, which would become
-		// a GET without the query, or one without a Location. Sending the
-		// request again is redirected again.
-		e = e.WithHint("Something in front of the CalDAV server redirected the request: "+
-			"usually a login page, a single sign-on proxy, or a server URL that should use "+
-			"https. The same request is redirected again, so check the server URL "+
-			"(WECOM_CALENDAR_SERVER or the context's server) first.").
-			WithNextSteps("wecom-calendar-cli doctor", "wecom-calendar-cli config get-contexts")
-		e.Retryable = false
+		// a GET without the query, one to another origin, the tenth hop, or
+		// one without a Location. The kit's redirect rule reports it.
+		loc, _ := resp.Location()
+		e = e.WithRedirect(loc, redirectGuide)
 	}
 	if status == http.StatusForbidden {
 		// A blanket 403 from this server usually means a wrong path/verb, not a
@@ -167,6 +164,12 @@ func (c *apiClient) statusError(status int, body []byte) error {
 		e = e.WithHint("The WeCom CalDAV server returns 403 for unsupported paths/verbs as well as real permission failures.")
 	}
 	return e
+}
+
+// redirectGuide is what a redirect's error tells the user to check.
+var redirectGuide = cerrors.RedirectGuide{
+	Setting: "the server URL (WECOM_CALENDAR_SERVER or the context's server)",
+	Steps:   []string{"wecom-calendar-cli doctor", "wecom-calendar-cli config get-contexts"},
 }
 
 // resolveURL turns a server-supplied href (a path, or an absolute URL echoed

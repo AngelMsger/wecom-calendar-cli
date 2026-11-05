@@ -9,7 +9,8 @@ import (
 
 // TestRedirectCrossOriginRefused guards the credential-leak vector: the client
 // must refuse a redirect that leaves the first hop's origin (here a different
-// port), so Authorization is never forwarded off the configured server.
+// port), so Authorization is never forwarded off the configured server. Since
+// agent-cli-kit v0.9.0 the refused redirect is the answer, not an error.
 func TestRedirectCrossOriginRefused(t *testing.T) {
 	reached := false
 	dest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,11 +26,12 @@ func TestRedirectCrossOriginRefused(t *testing.T) {
 	c := New(Options{})
 	req, _ := http.NewRequest(http.MethodGet, src.URL+"/", nil)
 	resp, err := c.Do(context.Background(), req)
-	if resp != nil {
-		resp.Body.Close()
+	if err != nil {
+		t.Fatalf("a refused redirect is the answer, not an error: %v", err)
 	}
-	if err == nil {
-		t.Fatal("cross-origin redirect should be refused")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want the refused 302", resp.StatusCode)
 	}
 	if reached {
 		t.Fatal("request must not reach the cross-origin destination")

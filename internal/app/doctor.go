@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/angelmsger/agent-cli-kit/doctor"
 	"github.com/angelmsger/agent-cli-kit/update"
 	"github.com/angelmsger/wecom-calendar-cli/internal/auth"
 	"github.com/angelmsger/wecom-calendar-cli/internal/config"
@@ -91,8 +92,8 @@ func runDoctor(s *appState, skipUpdate bool) doctorReport {
 	credOK := credErr == nil
 	checks = append(checks, doctorCheck{
 		Name: "credentials", OK: credOK,
-		Status: diagnosticStatus(credErr), RecoveryScope: diagnosticRecoveryScope(credErr),
-		Detail: pick(credOK, "scheme = "+cred.Scheme, detailOf(credErr)),
+		Status: doctor.Status(credErr), RecoveryScope: doctor.RecoveryScope(credErr),
+		Detail: pick(credOK, "scheme = "+cred.Scheme, doctor.Detail(credErr)),
 	})
 
 	// 3. Connectivity (only when prerequisites pass).
@@ -113,14 +114,14 @@ func runDoctor(s *appState, skipUpdate bool) doctorReport {
 			Verbose:       s.verboseLog(),
 		})
 		if err != nil {
-			checks = append(checks, doctorCheck{Name: "connectivity", OK: false, Status: diagnosticStatus(err), Detail: detailOf(err)})
+			checks = append(checks, doctorCheck{Name: "connectivity", OK: false, Status: doctor.Status(err), Detail: doctor.Detail(err)})
 		} else {
 			pingErr := c.Ping(ctx)
 			reachable = pingErr == nil
 			client = c
 			checks = append(checks, doctorCheck{
-				Name: "connectivity", OK: reachable, Status: diagnosticStatus(pingErr),
-				Detail: pick(reachable, "reachable at "+cfg.BaseURL, detailOf(pingErr)),
+				Name: "connectivity", OK: reachable, Status: doctor.Status(pingErr),
+				Detail: pick(reachable, "reachable at "+cfg.BaseURL, doctor.Detail(pingErr)),
 			})
 		}
 	} else {
@@ -142,8 +143,8 @@ func runDoctor(s *appState, skipUpdate bool) doctorReport {
 	if client != nil && reachable {
 		cals, err := client.ListCalendars(doctorCtx)
 		checks = append(checks, doctorCheck{
-			Name: "calendars", OK: err == nil, Status: diagnosticStatus(err),
-			Detail: pick(err == nil, fmt.Sprintf("%d calendars visible", len(cals)), detailOf(err)),
+			Name: "calendars", OK: err == nil, Status: doctor.Status(err),
+			Detail: pick(err == nil, fmt.Sprintf("%d calendars visible", len(cals)), doctor.Detail(err)),
 		})
 	}
 	checks = append(checks, companionSkillDoctorCheck())
@@ -198,37 +199,6 @@ func companionSkillDoctorCheck() doctorCheck {
 	}
 }
 
-func diagnosticStatus(err error) string {
-	if err == nil {
-		return "ok"
-	}
-	ce := cerrors.AsCLIError(err)
-	switch ce.Code {
-	case "CREDENTIAL_STORE_INACCESSIBLE":
-		return "inaccessible"
-	case "CREDENTIAL_NOT_VISIBLE_OR_MISSING":
-		return "missing_or_inaccessible"
-	}
-	switch ce.Category {
-	case cerrors.CategoryAuth, cerrors.CategoryPermission:
-		return "rejected_by_server"
-	case cerrors.CategoryNetwork, cerrors.CategoryServer:
-		return "unreachable"
-	default:
-		return "invalid"
-	}
-}
-
-func diagnosticRecoveryScope(err error) string {
-	if err == nil {
-		return ""
-	}
-	if recovery := cerrors.AsCLIError(err).Recovery; recovery != nil {
-		return recovery.Scope
-	}
-	return ""
-}
-
 // reportOffersReuse puts `auth reuse` ahead of configuring credentials when the
 // context lacks only an identity another stored context has. An unreadable
 // store is excluded: reuse reads the same store, and that failure is recovered
@@ -269,11 +239,4 @@ func pick(ok bool, yes, no string) string {
 		return yes
 	}
 	return no
-}
-
-func detailOf(err error) string {
-	if err == nil {
-		return ""
-	}
-	return cerrors.AsCLIError(err).Message
 }
