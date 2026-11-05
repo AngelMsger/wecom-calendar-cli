@@ -23,7 +23,11 @@ annotated. That is the one structural departure from the family shape.
   CLI's hints (`hints.go`); `pkg/transport` re-exports the kit's retrying HTTP
   client with this CLI's defaults: its User-Agent, the same-origin redirect
   guard, and retries for the read-only CalDAV verbs `PROPFIND` and `REPORT`
-  alongside `GET` and `HEAD`. `internal/auth` declares this CLI's one auth
+  alongside `GET` and `HEAD`. A `PROPFIND` or `REPORT` follows only a 307 or
+  308 to the same origin, which sends the same method and body; a 301, 302
+  or 303 would become a GET without the body, so it comes back and is
+  reported as `CALDAV_SERVER` with the redirect's status, not retryable (the
+  same request is redirected again), with a hint to check the server URL. `internal/auth` declares this CLI's one auth
   scheme and its recovery wording, maps config onto the kit's resolver, and
   adds the `auth reuse` step when another context could be reused.
   `internal/config` registers this CLI's settings, file location and wording

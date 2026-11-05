@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use agent-cli-kit v0.8.1. A PROPFIND or REPORT (`calendar` listing,
+  `sync`, `doctor`) that is answered with a 301, 302 or 303 is no longer
+  followed: Go would send a GET without the request's body. The redirect is
+  reported as itself, sent once: `CALDAV_SERVER` (server, exit 9) with the
+  redirect's status in `http_status`, `retryable: false` (the same request is
+  redirected again), a hint that the server URL usually needs fixing (a
+  login page, a single sign-on proxy, or an `http://` URL that should use
+  https), and `doctor` and `config get-contexts` as next steps. **Released
+  output that changes for such a redirect:**
+  - to the same origin, 0.6.x followed it and reported the page that GET
+    got: `CALDAV_SERVER` with `http_status` 200 and `retryable: true` for a
+    login page, `CALDAV_AUTH` (exit 4) for a 401, `CALDAV_NOT_FOUND` (exit 6)
+    for a 404, and a 5xx page was retried;
+  - to another origin (including an `http://` server URL redirected to
+    `https://`), it was refused as `NETWORK` (exit 8, no `http_status`);
+  - a redirect loop ended as `NETWORK` after 10 requests.
+
+  A 307 or 308 to the same origin, which keeps the method and body, is still
+  followed, and one to another origin is still refused as `NETWORK`. Fetching
+  an event (a GET) is unchanged. For a library caller that passes its own
+  HTTP client (`Options.Doer`), the kit likewise answers such a read with the
+  redirect, not the GET's page. Update the companion Skill to `0.5.2`: exit 9
+  covers a redirect, which is not retried.
 - Use agent-cli-kit v0.7.0. Its HTTP client no longer follows a redirect of a
   write; the CalDAV client only reads (GET, PROPFIND and REPORT, whose
   same-origin redirects are still followed), so its behavior is unchanged.

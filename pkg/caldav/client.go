@@ -148,6 +148,19 @@ func (c *apiClient) statusError(status int, body []byte) error {
 	code := "CALDAV_" + strings.ToUpper(string(cat))
 	msg := fmt.Sprintf("CalDAV server returned HTTP %d", status)
 	e := cerrors.New(cat, code, msg).WithHTTPStatus(status)
+	if status >= 300 && status < 400 {
+		// The client follows only a redirect that sends the same read again
+		// to the same origin, so a redirect that comes back is one it cannot
+		// follow: a PROPFIND or REPORT's 301, 302 or 303, which would become
+		// a GET without the query, or one without a Location. Sending the
+		// request again is redirected again.
+		e = e.WithHint("Something in front of the CalDAV server redirected the request: "+
+			"usually a login page, a single sign-on proxy, or a server URL that should use "+
+			"https. The same request is redirected again, so check the server URL "+
+			"(WECOM_CALENDAR_SERVER or the context's server) first.").
+			WithNextSteps("wecom-calendar-cli doctor", "wecom-calendar-cli config get-contexts")
+		e.Retryable = false
+	}
 	if status == http.StatusForbidden {
 		// A blanket 403 from this server usually means a wrong path/verb, not a
 		// permission problem; keep the hint honest.
