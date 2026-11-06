@@ -9,29 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Use agent-cli-kit v0.8.1. A PROPFIND or REPORT (`calendar` listing,
-  `sync`, `doctor`) that is answered with a 301, 302 or 303 is no longer
-  followed: Go would send a GET without the request's body. The redirect is
-  reported as itself, sent once: `CALDAV_SERVER` (server, exit 9) with the
+- Use agent-cli-kit v0.9.0 (after v0.8.1). Every redirect the client does
+  not follow is reported as itself: `CALDAV_SERVER` (server, exit 9) with the
   redirect's status in `http_status`, `retryable: false` (the same request is
-  redirected again), a hint that the server URL usually needs fixing (a
-  login page, a single sign-on proxy, or an `http://` URL that should use
-  https), and `doctor` and `config get-contexts` as next steps. **Released
-  output that changes for such a redirect:**
-  - to the same origin, 0.6.x followed it and reported the page that GET
-    got: `CALDAV_SERVER` with `http_status` 200 and `retryable: true` for a
-    login page, `CALDAV_AUTH` (exit 4) for a 401, `CALDAV_NOT_FOUND` (exit 6)
-    for a 404, and a 5xx page was retried;
-  - to another origin (including an `http://` server URL redirected to
-    `https://`), it was refused as `NETWORK` (exit 8, no `http_status`);
-  - a redirect loop ended as `NETWORK` after 10 requests.
+  redirected again), a hint naming where it points (the scheme and host only)
+  and that the server URL usually needs fixing (a login page, a single
+  sign-on proxy, or an `http://` URL that should use https), and `doctor` and
+  `config get-contexts` as next steps. The rule is the kit's
+  `CLIError.WithRedirect`, shared by the family. The client still follows a
+  read's redirect only to the same origin and only when it sends the same
+  request again (a GET's redirect, or a PROPFIND or REPORT's 307 or 308).
+  **Released output that changes:**
+  - a PROPFIND or REPORT (`calendar` listing, `sync`, `doctor`) answered
+    with a 301, 302 or 303 to the same origin: 0.6.x followed it with a GET
+    without the request's body and reported the page that GET got:
+    `CALDAV_SERVER` with `http_status` 200 and `retryable: true` for a login
+    page, `CALDAV_AUTH` (exit 4) for a 401, `CALDAV_NOT_FOUND` (exit 6) for a
+    404, and a 5xx page was retried;
+  - any redirect to another origin (including an `http://` server URL
+    redirected to `https://`), for every request, and a redirect loop: 0.6.x
+    refused it as `NETWORK` (exit 8, no `http_status`, retryable, a
+    DNS/TLS/timeout hint), a loop after 10 requests;
+  - a 3xx the client cannot follow at all (a 300, a 304, or a redirect
+    without a `Location`), including for fetching an event: 0.6.x reported
+    `CALDAV_SERVER` with `retryable: true` and "Retry later"; it is now not
+    retryable, with a hint that the same request gets the same answer.
 
-  A 307 or 308 to the same origin, which keeps the method and body, is still
-  followed, and one to another origin is still refused as `NETWORK`. Fetching
-  an event (a GET) is unchanged. For a library caller that passes its own
-  HTTP client (`Options.Doer`), the kit likewise answers such a read with the
-  redirect, not the GET's page. Update the companion Skill to `0.5.2`: exit 9
-  covers a redirect, which is not retried.
+  `doctor`'s `connectivity` and `calendars` checks report a redirect with
+  status `redirected` instead of `unreachable`, and their `detail` adds the
+  redirect hint; 0.6.x showed only "CalDAV server returned HTTP 302". The
+  status and detail rules come from the kit's `doctor` package. For a library
+  caller that passes its own HTTP client (`Options.Doer`), the kit likewise
+  answers a PROPFIND or REPORT with its 301, 302 or 303, not the GET's page.
+  `pkg/errors` re-exports the kit's `RedirectGuide`. Update the companion
+  Skill to `0.5.2`: exit 9 covers a redirect, which is not retried, and
+  `doctor`'s `redirected` status.
 - Use agent-cli-kit v0.7.0. Its HTTP client no longer follows a redirect of a
   write; the CalDAV client only reads (GET, PROPFIND and REPORT, whose
   same-origin redirects are still followed), so its behavior is unchanged.

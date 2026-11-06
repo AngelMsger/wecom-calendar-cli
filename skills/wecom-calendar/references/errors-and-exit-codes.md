@@ -212,5 +212,6 @@ Two results look like failures and are not:
   with bounded backoff — a few attempts, not a loop — and prefer an
   incremental `sync` over `sync --full` when throttled. A server error with a
   3xx `http_status` is a redirect (a login page, a single sign-on proxy, or
-  an `http://` server URL that should use https): it is not retryable, so
-  run `doctor` and check the server URL instead.
+  an `http://` server URL that should use https; the hint names where it
+  points): it is not retryable, so run `doctor` and check the server URL
+  instead. `doctor` reports such a check with status `redirected`.

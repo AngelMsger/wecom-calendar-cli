@@ -11,7 +11,10 @@ wecom-calendar-cli doctor
 
 `doctor` checks configuration, credentials and connectivity and prints a JSON
 report. If `healthy` is `true`, you are ready; otherwise each failing check's
-`detail` explains what to fix. Two further entries are informational and never
+`detail` explains what to fix. A check whose `status` is `redirected` reached
+a server that redirected it (usually a login page, a single sign-on proxy, or
+an `http://` URL that should use https): its `detail` names where it points;
+fix the server URL rather than the credentials. Two further entries are informational and never
 change `healthy`: `calendars` (how many are visible) and `companion-skill`
 (whether this Skill is installed, loaded and current, with the command to run
 when it is not).

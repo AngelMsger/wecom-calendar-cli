@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/angelmsger/agent-cli-kit/doctor"
 	cerrors "github.com/angelmsger/wecom-calendar-cli/pkg/errors"
 )
 
@@ -70,8 +71,12 @@ func TestDAVRedirectIsReportedNotFollowedAsGet(t *testing.T) {
 				if crossOrigin {
 					name += " cross-origin"
 				}
+				wantTarget := "redirected the request to " + srv.URL + ":"
+				if crossOrigin {
+					wantTarget = "redirected the request to " + other.URL + ":"
+				}
 				if ce == nil || ce.Code != "CALDAV_SERVER" || ce.HTTPStatus != status || ce.Retryable ||
-					!strings.Contains(ce.Hint, "redirected the request") ||
+					!strings.Contains(ce.Hint, wantTarget) ||
 					len(ce.NextSteps) == 0 || ce.NextSteps[0] != "wecom-calendar-cli doctor" {
 					t.Fatalf("%s %d: got %+v; want CALDAV_SERVER with the redirect's status, not retryable, pointing at the URL", name, status, ce)
 				}
@@ -111,5 +116,68 @@ func TestDAVPreservingRedirectIsFollowed(t *testing.T) {
 				t.Fatalf("%s %d: %v; want the read followed with its method and body", read.method, status, err)
 			}
 		}
+	}
+}
+
+// A redirect the client refuses to follow is reported the same way: a GET or
+// a 307 to another origin, and the tenth hop of a loop. Before agent-cli-kit
+// v0.9.0 they failed as NETWORK (exit 8, retryable) with a DNS/TLS/timeout
+// hint. They are sent once (a loop, ten times) and nothing reaches another
+// origin. doctor reports them as redirected, with the hint in the detail.
+func TestRefusedRedirectIsReportedAsARedirect(t *testing.T) {
+	var otherHits atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		otherHits.Add(1)
+	}))
+	defer other.Close()
+	getEvent := func(c Client) error { _, err := c.GetEvent(context.Background(), "/calendar/1/e.ics"); return err }
+	listCalendars := func(c Client) error { _, err := c.ListCalendars(context.Background()); return err }
+	cases := []struct {
+		name   string
+		call   func(Client) error
+		status int
+		loop   bool
+		sends  int32
+	}{
+		{"GET cross-origin 302", getEvent, http.StatusFound, false, 1},
+		{"PROPFIND cross-origin 307", listCalendars, http.StatusTemporaryRedirect, false, 1},
+		{"GET loop", getEvent, http.StatusFound, true, 10},
+		{"PROPFIND 307 loop", listCalendars, http.StatusTemporaryRedirect, true, 10},
+	}
+	for _, tc := range cases {
+		var sends atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sends.Add(1)
+			if tc.loop {
+				http.Redirect(w, r, r.URL.Path, tc.status)
+				return
+			}
+			http.Redirect(w, r, other.URL+"/sso?ticket=sign-in-secret", tc.status)
+		}))
+		client, err := Build(BuildParams{BaseURL: srv.URL, Timeout: 5 * time.Second, MaxRetries: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = tc.call(client)
+		srv.Close()
+		ce := cerrors.AsCLIError(err)
+		if ce == nil || ce.Code != "CALDAV_SERVER" || ce.HTTPStatus != tc.status || ce.Retryable ||
+			!strings.Contains(ce.Hint, "check the server URL (WECOM_CALENDAR_SERVER or the context's server) first") ||
+			strings.Contains(ce.Hint, "sign-in-secret") ||
+			len(ce.NextSteps) == 0 || ce.NextSteps[0] != "wecom-calendar-cli doctor" {
+			t.Fatalf("%s: got %+v; want CALDAV_SERVER with the redirect's status, not retryable", tc.name, ce)
+		}
+		if got := sends.Load(); got != tc.sends {
+			t.Fatalf("%s: sent %d, want %d", tc.name, got, tc.sends)
+		}
+		if got := doctor.Status(err); got != doctor.StatusRedirected {
+			t.Fatalf("%s: doctor.Status = %q, want redirected", tc.name, got)
+		}
+		if got := doctor.Detail(err); !strings.HasPrefix(got, "CalDAV server returned HTTP ") || !strings.Contains(got, "The server redirected the request to ") {
+			t.Fatalf("%s: doctor.Detail = %q", tc.name, got)
+		}
+	}
+	if got := otherHits.Load(); got != 0 {
+		t.Fatalf("%d requests reached the other origin; want none", got)
 	}
 }
